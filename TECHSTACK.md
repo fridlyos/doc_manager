@@ -2,7 +2,7 @@
 
 ## Document Status
 
-- **Status:** Draft design target for review; implementation has not started.
+- **Status:** Phase 0 architecture and contract artifacts drafted for review; Phase 1 implementation has not started.
 - **Source of requirements:** [`README.md`](README.md)
 - **Initial delivery target:** Single-user, local/LAN deployment using Docker Desktop with the WSL 2 Linux engine on Windows.
 - **Primary constraint:** Documents, extracted text, metadata, embeddings, and vector indexes remain local. Model inference is local by default; an explicitly enabled external generation provider may receive only the current question and bounded retrieved evidence.
@@ -82,6 +82,7 @@ Versions will be pinned in lockfiles and Docker image tags during Phase 1. Major
 | OpenAI Python SDK (optional dependency extra) | Typed OpenAI Responses API adapter and streaming events |
 | PyMuPDF | Page-aware PDF text and metadata extraction |
 | charset-normalizer | Safe encoding detection for text-like files |
+| zstandard | Compressed, checksummed extracted-text artifacts |
 | FastEmbed | Local document/query embeddings |
 | qdrant-client | Collection management, upsert, filtering, deletion, and similarity search |
 | tiktoken-compatible tokenizer or model tokenizer adapter | Deterministic token-aware chunk sizing; selected during the chunker implementation |
@@ -222,7 +223,8 @@ Filesystem watchers are not the source of truth. A later watcher can request an 
 - Reports **exact duplicates** when active file versions share a file hash.
 - Reports **text duplicates** when different file hashes share normalized extracted text.
 - Groups all active paths and source locations for each duplicate.
-- Reuses extraction, chunks, and embeddings for content already represented by an identical normalized-text object.
+- Computes a structure hash over ordered normalized page/section records in addition to the pagination-insensitive text hash.
+- Reuses artifacts, chunks, and embeddings only when the structure hash and relevant processing profiles match; text-equivalent files with different pagination remain separate for citation correctness.
 - Produces source-location coverage and missing-copy reports.
 
 Duplicate groups are derived from authoritative hashes. They can be materialized for UI performance but must be safely rebuildable.
@@ -248,7 +250,7 @@ Encrypted, malformed, empty, or OCR-only files receive a specific error code and
 ### 5.6 Extracted Artifact Store
 
 - Writes compressed, versioned extraction artifacts under `app-data/extracted-text/`.
-- Uses a content-addressed path based on normalized text hash and extraction version.
+- Uses a content-addressed path based on structured extraction hash, extraction profile, and normalization version.
 - Writes to a temporary file and atomically renames only after success.
 - Stores page/section boundaries so re-chunking does not require reopening the source file.
 - Supports cleanup only after confirming no catalog record references an artifact.
@@ -455,13 +457,13 @@ Represents the observed bytes of a catalog entry at a point in time.
 
 ### `content_objects`
 
-Represents reusable normalized extracted content.
+Represents reusable structured extracted content.
 
-- `id`, `text_hash`
-- `extractor_name`, `extractor_version`, `normalization_version`
+- `id`, `text_hash`, `structure_hash`
+- `extractor_name`, `extractor_version`, `extraction_profile_hash`, `normalization_version`
 - `artifact_path`, `page_count`, `character_count`
 - `metadata_json`, `created_at`
-- unique identity across text hash and relevant pipeline profile
+- unique identity across structure hash and relevant extraction/normalization profile
 
 ### `chunks`
 
@@ -539,8 +541,8 @@ claim job
   -> calculate SHA-256
   -> reuse an exact known version when safe
   -> extract pages/sections
-  -> normalize text and calculate text hash
-  -> reuse canonical content when already indexed
+  -> normalize sections and calculate text-equivalence and structure hashes
+  -> reuse canonical content only when structure and processing profiles match
   -> otherwise write extraction artifact
   -> create deterministic chunks
   -> batch local embeddings
@@ -769,7 +771,12 @@ doc_manager/
 │   └── frontend.Dockerfile
 ├── docs/
 │   ├── adr/
+│   │   └── README.md
 │   ├── api/
+│   │   └── contracts.md
+│   ├── architecture/
+│   │   ├── ingestion-job-state-machine.md
+│   │   └── phase-0-baseline.md
 │   ├── operations/
 │   │   ├── backup-restore.md
 │   │   ├── provider-configuration.md
@@ -1310,6 +1317,14 @@ Deliverables:
 - Define API error envelope, pagination format, IDs, timestamps, and job state machine.
 - Define sample synthetic documents and expected citations.
 
+Phase 0 artifacts:
+
+- [`docs/architecture/phase-0-baseline.md`](docs/architecture/phase-0-baseline.md) is the review index and records remaining operator-supplied deployment inputs.
+- [`docs/adr/README.md`](docs/adr/README.md) indexes the proposed decisions and their approval state.
+- [`docs/api/contracts.md`](docs/api/contracts.md) defines cross-endpoint API conventions.
+- [`docs/architecture/ingestion-job-state-machine.md`](docs/architecture/ingestion-job-state-machine.md) defines durable job transitions and retry/cancellation semantics.
+- [`test-data/synthetic/README.md`](test-data/synthetic/README.md) and its machine-readable ground truth define the non-sensitive validation corpus.
+
 Exit criteria:
 
 - Component boundaries and data ownership are agreed.
@@ -1417,7 +1432,7 @@ Deliverables:
 - Enable per-location schedules and manual file/location/all re-indexing.
 - Implement profile-driven full re-index jobs.
 - Implement exact-file and normalized-text duplicate reports.
-- Reuse canonical content and vectors across duplicate paths.
+- Reuse canonical content and vectors across exact or structure-equivalent paths; report text-equivalent files with different pagination without sharing citation-bearing chunks.
 - Add duplicate and coverage UI.
 
 Exit criteria:

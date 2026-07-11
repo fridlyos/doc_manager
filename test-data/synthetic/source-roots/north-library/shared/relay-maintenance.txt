@@ -1,0 +1,5 @@
+Relay Maintenance Memo RM-52
+
+The fictional maintenance window is 2031-06-04 from 16:10 to 16:40 UTC.
+The responsible unit is Juniper Crew.
+Retrieval label: FICTIONAL-RM-52.
