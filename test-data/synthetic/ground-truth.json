@@ -1,0 +1,583 @@
+{
+  "schema_version": "1.0.0",
+  "corpus_id": "docman-synthetic-phase0-v1",
+  "description": "Deterministic fictional fixtures for catalog, retrieval, citation, duplicate, conflict, and generation-policy tests.",
+  "normalization_contract": {
+    "fixture_profile_id": "fixture-whitespace-v1",
+    "steps": [
+      "decode UTF-8",
+      "trim leading and trailing whitespace",
+      "collapse every Unicode whitespace run to one ASCII space"
+    ],
+    "scope": "This contract identifies the intentional normalized-text pair; it is not the complete application normalization specification."
+  },
+  "duplicate_group_expectations": [
+    {
+      "group_id": "exact-relay-maintenance-v1",
+      "classification": "exact_file",
+      "fixture_ids": [
+        "doc_north_relay_maintenance",
+        "doc_south_relay_maintenance_renamed"
+      ],
+      "file_sha256_equal": true,
+      "structured_extraction_reuse": "eligible_only_after_format_extractor_profile_and_structure_compatibility_checks"
+    },
+    {
+      "group_id": "text-harbor-window-v1",
+      "classification": "text_equivalent",
+      "fixture_ids": [
+        "doc_north_harbor_window",
+        "doc_south_harbor_window_reflowed"
+      ],
+      "file_sha256_equal": false,
+      "fixture_normalized_text_sha256_equal": true,
+      "structured_extraction_reuse": "not_asserted",
+      "chunk_or_vector_reuse": "not_asserted"
+    },
+    {
+      "group_id": "relative-path-operations-status-v1",
+      "classification": "same_relative_path_conflict",
+      "fixture_ids": [
+        "doc_north_operations_status",
+        "doc_south_operations_status"
+      ],
+      "relative_paths_equal": true,
+      "file_sha256_equal": false,
+      "structured_extraction_reuse": "not_allowed"
+    }
+  ],
+  "locations": [
+    {
+      "fixture_id": "loc_north_library",
+      "name": "Synthetic North Library",
+      "source_root": "source-roots/north-library",
+      "scan_root": "/sources/synthetic/north-library",
+      "display_root": "\\\\fictional-nas\\north-library",
+      "path_style": "windows_unc",
+      "external_generation_policy": "deny"
+    },
+    {
+      "fixture_id": "loc_south_archive",
+      "name": "Synthetic South Archive",
+      "source_root": "source-roots/south-archive",
+      "scan_root": "/sources/synthetic/south-archive",
+      "display_root": "\\\\fictional-nas\\south-archive",
+      "path_style": "windows_unc",
+      "external_generation_policy": "allow"
+    }
+  ],
+  "documents": [
+    {
+      "fixture_id": "doc_north_aurora_archive",
+      "location_fixture_id": "loc_north_library",
+      "relative_path": "briefs/aurora-archive.txt",
+      "corpus_path": "source-roots/north-library/briefs/aurora-archive.txt",
+      "format": "txt",
+      "sha256": "7cb11f566ae85fd8bf53ab87028f8c49a2dd08c630930c0d048904c2d54fd493",
+      "duplicate_relationships": {
+        "exact_file_group": null,
+        "normalized_text_group": null,
+        "renamed_copy_of": null,
+        "normalization_equivalent_of": null,
+        "same_relative_path_conflict_group": null
+      }
+    },
+    {
+      "fixture_id": "doc_north_pollen_protocol",
+      "location_fixture_id": "loc_north_library",
+      "relative_path": "guides/pollen-protocol.md",
+      "corpus_path": "source-roots/north-library/guides/pollen-protocol.md",
+      "format": "md",
+      "sha256": "4895eea5893fb9785933a008df07ad3c322aa90886d1057e7748bd81378eaad1",
+      "duplicate_relationships": {
+        "exact_file_group": null,
+        "normalized_text_group": null,
+        "renamed_copy_of": null,
+        "normalization_equivalent_of": null,
+        "same_relative_path_conflict_group": null
+      }
+    },
+    {
+      "fixture_id": "doc_north_signal_lanterns",
+      "location_fixture_id": "loc_north_library",
+      "relative_path": "catalog/signal-lanterns.csv",
+      "corpus_path": "source-roots/north-library/catalog/signal-lanterns.csv",
+      "format": "csv",
+      "sha256": "7b1d2ac0892e3cfa97fb0de846b6d4cd1ed8e72f53e2785998641c8ebb0fbce2",
+      "duplicate_relationships": {
+        "exact_file_group": null,
+        "normalized_text_group": null,
+        "renamed_copy_of": null,
+        "normalization_equivalent_of": null,
+        "same_relative_path_conflict_group": null
+      }
+    },
+    {
+      "fixture_id": "doc_north_relay_maintenance",
+      "location_fixture_id": "loc_north_library",
+      "relative_path": "shared/relay-maintenance.txt",
+      "corpus_path": "source-roots/north-library/shared/relay-maintenance.txt",
+      "format": "txt",
+      "sha256": "7c6f4eafcea9a9a6471032300433a9b2ecbc01d43bfbee3a85c4329974fe3d3f",
+      "duplicate_relationships": {
+        "exact_file_group": "exact-relay-maintenance-v1",
+        "normalized_text_group": null,
+        "renamed_copy_of": null,
+        "normalization_equivalent_of": null,
+        "same_relative_path_conflict_group": null
+      }
+    },
+    {
+      "fixture_id": "doc_south_relay_maintenance_renamed",
+      "location_fixture_id": "loc_south_archive",
+      "relative_path": "mirrors/relay-maintenance-renamed.txt",
+      "corpus_path": "source-roots/south-archive/mirrors/relay-maintenance-renamed.txt",
+      "format": "txt",
+      "sha256": "7c6f4eafcea9a9a6471032300433a9b2ecbc01d43bfbee3a85c4329974fe3d3f",
+      "duplicate_relationships": {
+        "exact_file_group": "exact-relay-maintenance-v1",
+        "normalized_text_group": null,
+        "renamed_copy_of": "doc_north_relay_maintenance",
+        "normalization_equivalent_of": null,
+        "same_relative_path_conflict_group": null
+      }
+    },
+    {
+      "fixture_id": "doc_north_harbor_window",
+      "location_fixture_id": "loc_north_library",
+      "relative_path": "notices/harbor-window.txt",
+      "corpus_path": "source-roots/north-library/notices/harbor-window.txt",
+      "format": "txt",
+      "sha256": "97dd567badcef4425fd0f33b9efd3fd983d456513899629ca4e0392d170d52c6",
+      "fixture_normalized_text_sha256": "3a86ce7af28fd91400c76dd6100524ce74bbe8713956711433bf330f167914d9",
+      "duplicate_relationships": {
+        "exact_file_group": null,
+        "normalized_text_group": "text-harbor-window-v1",
+        "renamed_copy_of": null,
+        "normalization_equivalent_of": null,
+        "same_relative_path_conflict_group": null
+      }
+    },
+    {
+      "fixture_id": "doc_south_harbor_window_reflowed",
+      "location_fixture_id": "loc_south_archive",
+      "relative_path": "notices/harbor-window-reflowed.txt",
+      "corpus_path": "source-roots/south-archive/notices/harbor-window-reflowed.txt",
+      "format": "txt",
+      "sha256": "f8dbecd7c032f8145222defa171a7ee8f71ca56d0b7d0324d83052c09c3a8a09",
+      "fixture_normalized_text_sha256": "3a86ce7af28fd91400c76dd6100524ce74bbe8713956711433bf330f167914d9",
+      "duplicate_relationships": {
+        "exact_file_group": null,
+        "normalized_text_group": "text-harbor-window-v1",
+        "renamed_copy_of": null,
+        "normalization_equivalent_of": "doc_north_harbor_window",
+        "same_relative_path_conflict_group": null
+      }
+    },
+    {
+      "fixture_id": "doc_north_operations_status",
+      "location_fixture_id": "loc_north_library",
+      "relative_path": "operations/status.txt",
+      "corpus_path": "source-roots/north-library/operations/status.txt",
+      "format": "txt",
+      "sha256": "8e256e3b9c12c53d8a69edc05c5b05d85b6169beee06f153d253c118be788db1",
+      "duplicate_relationships": {
+        "exact_file_group": null,
+        "normalized_text_group": null,
+        "renamed_copy_of": null,
+        "normalization_equivalent_of": null,
+        "same_relative_path_conflict_group": "relative-path-operations-status-v1"
+      }
+    },
+    {
+      "fixture_id": "doc_south_operations_status",
+      "location_fixture_id": "loc_south_archive",
+      "relative_path": "operations/status.txt",
+      "corpus_path": "source-roots/south-archive/operations/status.txt",
+      "format": "txt",
+      "sha256": "ba476f2de7b384fe049d71b6928ae7515a2d9c454b2f18b56760df7a566bb810",
+      "duplicate_relationships": {
+        "exact_file_group": null,
+        "normalized_text_group": null,
+        "renamed_copy_of": null,
+        "normalization_equivalent_of": null,
+        "same_relative_path_conflict_group": "relative-path-operations-status-v1"
+      }
+    },
+    {
+      "fixture_id": "doc_south_moonseed_handbook",
+      "location_fixture_id": "loc_south_archive",
+      "relative_path": "records/moonseed-handbook.md",
+      "corpus_path": "source-roots/south-archive/records/moonseed-handbook.md",
+      "format": "md",
+      "sha256": "794265391df532bff999602dfde66eac3713b0a5ddddc842cb6ca22bbc81dc90",
+      "duplicate_relationships": {
+        "exact_file_group": null,
+        "normalized_text_group": null,
+        "renamed_copy_of": null,
+        "normalization_equivalent_of": null,
+        "same_relative_path_conflict_group": null
+      }
+    },
+    {
+      "fixture_id": "doc_south_kite_crates",
+      "location_fixture_id": "loc_south_archive",
+      "relative_path": "catalog/kite-crates.csv",
+      "corpus_path": "source-roots/south-archive/catalog/kite-crates.csv",
+      "format": "csv",
+      "sha256": "4e782b7cfa14da3439b76aa5eab356fc7063f856cce85d772bc2042dc8ad3b43",
+      "duplicate_relationships": {
+        "exact_file_group": null,
+        "normalized_text_group": null,
+        "renamed_copy_of": null,
+        "normalization_equivalent_of": null,
+        "same_relative_path_conflict_group": null
+      }
+    }
+  ],
+  "queries": [
+    {
+      "fixture_id": "query_aurora_archive",
+      "question": "What archive key is assigned to Project Aurora, and when is its seal inspected?",
+      "expected_behavior": "grounded_answer",
+      "citation_match": "all",
+      "expected_citations": [
+        {
+          "fixture_id": "doc_north_aurora_archive",
+          "page": null
+        }
+      ],
+      "required_answer_facts": [
+        "The archive key is AUR-417.",
+        "The seal is inspected on the second Monday of each month at 14:20 UTC."
+      ],
+      "required_answer_terms": [
+        "AUR-417",
+        "second Monday",
+        "14:20 UTC"
+      ]
+    },
+    {
+      "fixture_id": "query_pollen_protocol",
+      "question": "What must happen before jar PL-208 is opened, and where is it returned afterward?",
+      "expected_behavior": "grounded_answer",
+      "citation_match": "all",
+      "expected_citations": [
+        {
+          "fixture_id": "doc_north_pollen_protocol",
+          "page": null
+        }
+      ],
+      "required_answer_facts": [
+        "Place jar PL-208 on the violet tray and record its code in the paper log before opening it.",
+        "Return the jar to shelf Fern-4 after closing it."
+      ],
+      "required_answer_terms": [
+        "violet tray",
+        "paper log",
+        "Fern-4"
+      ]
+    },
+    {
+      "fixture_id": "query_signal_lantern_csv",
+      "question": "Which signal lantern has amber glass, and how often is it inspected?",
+      "expected_behavior": "grounded_answer",
+      "citation_match": "all",
+      "expected_citations": [
+        {
+          "fixture_id": "doc_north_signal_lanterns",
+          "page": null
+        }
+      ],
+      "required_answer_facts": [
+        "Signal lantern SL-11 has amber glass.",
+        "Its inspection interval is 18 days."
+      ],
+      "required_answer_terms": [
+        "SL-11",
+        "amber",
+        "18 days"
+      ]
+    },
+    {
+      "fixture_id": "query_exact_renamed_duplicate",
+      "question": "When is maintenance memo RM-52 scheduled, and which unit is responsible?",
+      "expected_behavior": "grounded_answer",
+      "citation_match": "any",
+      "expected_citations": [
+        {
+          "fixture_id": "doc_north_relay_maintenance",
+          "page": null
+        },
+        {
+          "fixture_id": "doc_south_relay_maintenance_renamed",
+          "page": null
+        }
+      ],
+      "required_answer_facts": [
+        "The RM-52 window is 2031-06-04 from 16:10 to 16:40 UTC.",
+        "Juniper Crew is responsible."
+      ],
+      "required_answer_terms": [
+        "RM-52",
+        "2031-06-04",
+        "16:10",
+        "16:40 UTC",
+        "Juniper Crew"
+      ]
+    },
+    {
+      "fixture_id": "query_normalized_text_duplicate",
+      "question": "When does Harbor Relay HR-9 inspection start, and who owns it?",
+      "expected_behavior": "grounded_answer",
+      "citation_match": "any",
+      "expected_citations": [
+        {
+          "fixture_id": "doc_north_harbor_window",
+          "page": null
+        },
+        {
+          "fixture_id": "doc_south_harbor_window_reflowed",
+          "page": null
+        }
+      ],
+      "required_answer_facts": [
+        "The HR-9 inspection starts Tuesday at 09:30.",
+        "Rowan Team owns it."
+      ],
+      "required_answer_terms": [
+        "HR-9",
+        "Tuesday",
+        "09:30",
+        "Rowan Team"
+      ]
+    },
+    {
+      "fixture_id": "query_same_path_conflict",
+      "question": "Compare the North and South status and token colors for fictional Operations Slot 7 at the recorded snapshot.",
+      "expected_behavior": "grounded_answer",
+      "citation_match": "all",
+      "expected_citations": [
+        {
+          "fixture_id": "doc_north_operations_status",
+          "page": null
+        },
+        {
+          "fixture_id": "doc_south_operations_status",
+          "page": null
+        }
+      ],
+      "required_answer_facts": [
+        "North is READY with an amber token.",
+        "South is PAUSED with a cobalt token."
+      ],
+      "required_answer_terms": [
+        "North",
+        "READY",
+        "amber",
+        "South",
+        "PAUSED",
+        "cobalt"
+      ]
+    },
+    {
+      "fixture_id": "query_moonseed_route",
+      "question": "What is the Moonseed dispatch code, departure platform, and departure time?",
+      "expected_behavior": "grounded_answer",
+      "citation_match": "all",
+      "expected_citations": [
+        {
+          "fixture_id": "doc_south_moonseed_handbook",
+          "page": null
+        }
+      ],
+      "required_answer_facts": [
+        "The dispatch code is MNS-204.",
+        "Packets leave Platform Quartz at 07:45 UTC."
+      ],
+      "required_answer_terms": [
+        "MNS-204",
+        "Platform Quartz",
+        "07:45 UTC"
+      ]
+    },
+    {
+      "fixture_id": "query_kite_crate_csv",
+      "question": "What seal code and destination belong to crate CR-8?",
+      "expected_behavior": "grounded_answer",
+      "citation_match": "all",
+      "expected_citations": [
+        {
+          "fixture_id": "doc_south_kite_crates",
+          "page": null
+        }
+      ],
+      "required_answer_facts": [
+        "Crate CR-8 uses seal TEAL-88.",
+        "Its destination is Fictional Pier 6."
+      ],
+      "required_answer_terms": [
+        "CR-8",
+        "TEAL-88",
+        "Fictional Pier 6"
+      ]
+    },
+    {
+      "fixture_id": "query_relay_document_paths",
+      "question": "Where can I retrieve maintenance memo RM-52?",
+      "expected_behavior": "path_lookup",
+      "citation_match": "any",
+      "expected_citations": [
+        {
+          "fixture_id": "doc_north_relay_maintenance",
+          "page": null
+        },
+        {
+          "fixture_id": "doc_south_relay_maintenance_renamed",
+          "page": null
+        }
+      ],
+      "expected_path_fixture_ids": [
+        "doc_north_relay_maintenance",
+        "doc_south_relay_maintenance_renamed"
+      ],
+      "required_answer_facts": [
+        "Both active physical paths for the exact duplicate are retrievable."
+      ],
+      "required_answer_terms": [
+        "relay-maintenance.txt",
+        "relay-maintenance-renamed.txt"
+      ]
+    },
+    {
+      "fixture_id": "query_insufficient_evidence",
+      "question": "What is the launch temperature of the fictional Zephyr engine?",
+      "expected_behavior": "insufficient_evidence",
+      "citation_match": "none",
+      "expected_citations": [],
+      "required_answer_facts": [],
+      "required_answer_terms": [
+        "insufficient evidence"
+      ]
+    }
+  ],
+  "external_generation_policy_cases": [
+    {
+      "fixture_id": "policy_external_globally_disabled",
+      "query_fixture_id": "query_moonseed_route",
+      "provider_id": "openai",
+      "deployment_external_llm_enabled": false,
+      "request_explicitly_selects_provider": true,
+      "evidence_fixture_ids": [
+        "doc_south_moonseed_handbook"
+      ],
+      "expected_decision": "deny",
+      "expected_error_code": "external_llm_disabled",
+      "generation_call_expected": false,
+      "external_transfer_expected": false
+    },
+    {
+      "fixture_id": "policy_external_allowed_south_only",
+      "query_fixture_id": "query_moonseed_route",
+      "provider_id": "openai",
+      "deployment_external_llm_enabled": true,
+      "request_explicitly_selects_provider": true,
+      "evidence_fixture_ids": [
+        "doc_south_moonseed_handbook"
+      ],
+      "expected_decision": "allow",
+      "expected_error_code": null,
+      "generation_call_expected": true,
+      "external_transfer_expected": true,
+      "outbound_payload_contract": {
+        "must_include": [
+          "question",
+          "grounding_instructions",
+          "evidence_text",
+          "opaque_citation_ids"
+        ],
+        "must_exclude": [
+          "scan_root",
+          "display_root",
+          "relative_path",
+          "file_name",
+          "location_name",
+          "tags",
+          "catalog_ids",
+          "original_files"
+        ]
+      }
+    },
+    {
+      "fixture_id": "policy_external_north_denied",
+      "query_fixture_id": "query_aurora_archive",
+      "provider_id": "openai",
+      "deployment_external_llm_enabled": true,
+      "request_explicitly_selects_provider": true,
+      "evidence_fixture_ids": [
+        "doc_north_aurora_archive"
+      ],
+      "expected_decision": "deny",
+      "expected_error_code": "external_source_policy_denied",
+      "generation_call_expected": false,
+      "external_transfer_expected": false
+    },
+    {
+      "fixture_id": "policy_external_mixed_sources_fail_closed",
+      "query_fixture_id": "query_same_path_conflict",
+      "provider_id": "openai",
+      "deployment_external_llm_enabled": true,
+      "request_explicitly_selects_provider": true,
+      "evidence_fixture_ids": [
+        "doc_north_operations_status",
+        "doc_south_operations_status"
+      ],
+      "expected_decision": "deny",
+      "expected_error_code": "external_source_policy_denied",
+      "generation_call_expected": false,
+      "external_transfer_expected": false
+    },
+    {
+      "fixture_id": "policy_external_not_explicitly_selected",
+      "query_fixture_id": "query_moonseed_route",
+      "provider_id": "openai",
+      "deployment_external_llm_enabled": true,
+      "request_explicitly_selects_provider": false,
+      "evidence_fixture_ids": [
+        "doc_south_moonseed_handbook"
+      ],
+      "expected_decision": "deny",
+      "expected_error_code": "external_provider_not_selected",
+      "generation_call_expected": false,
+      "external_transfer_expected": false
+    },
+    {
+      "fixture_id": "policy_local_provider_has_no_egress",
+      "query_fixture_id": "query_same_path_conflict",
+      "provider_id": "ollama",
+      "deployment_external_llm_enabled": true,
+      "request_explicitly_selects_provider": true,
+      "evidence_fixture_ids": [
+        "doc_north_operations_status",
+        "doc_south_operations_status"
+      ],
+      "expected_decision": "allow_local",
+      "expected_error_code": null,
+      "generation_call_expected": true,
+      "external_transfer_expected": false
+    },
+    {
+      "fixture_id": "policy_insufficient_evidence_no_provider_call",
+      "query_fixture_id": "query_insufficient_evidence",
+      "provider_id": "openai",
+      "deployment_external_llm_enabled": true,
+      "request_explicitly_selects_provider": true,
+      "evidence_fixture_ids": [],
+      "expected_decision": "insufficient_evidence",
+      "expected_error_code": null,
+      "generation_call_expected": false,
+      "external_transfer_expected": false
+    }
+  ],
+  "future_generated_fixture_specification": "future-generated-fixtures.md"
+}
