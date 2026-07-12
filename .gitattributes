@@ -1,0 +1,7 @@
+# Normalize all text to LF in the repository. This repo is developed on
+# Windows/WSL where the mount can rewrite line endings; enforcing LF keeps
+# diffs free of CRLF churn.
+* text=auto eol=lf
+
+# Shell scripts must be LF to run in Linux containers.
+*.sh text eol=lf

@@ -1,3 +1,29 @@
 .agents/
 .codex/
+.claude/
 
+# Secrets and local config
+.env
+.env.*
+!.env.example
+*.key
+
+# Local backup staging / output
+.backups/
+
+# Python
+__pycache__/
+*.py[cod]
+.venv/
+backend/.venv/
+.mypy_cache/
+.ruff_cache/
+.pytest_cache/
+
+# Node / frontend
+node_modules/
+frontend/dist/
+frontend/node_modules/
+
+# OS / editor
+.DS_Store

@@ -2,7 +2,7 @@
 
 ## Document Status
 
-- **Status:** Phase 0 architecture and contract artifacts drafted for review; Phase 1 implementation has not started.
+- **Status:** Phase 0 contracts drafted; Phase 1 repository and local infrastructure implemented (backend skeleton with health/logging/preflight, Compose stack, frontend scaffold, ops runbook). Docker-runtime acceptance tests (mapped-drive reboot, full stack `up`) are operator-run.
 - **Source of requirements:** [`README.md`](README.md)
 - **Initial delivery target:** Single-user, local/LAN deployment using Docker Desktop with the WSL 2 Linux engine on Windows.
 - **Primary constraint:** Documents, extracted text, metadata, embeddings, and vector indexes remain local. Model inference is local by default; an explicitly enabled external generation provider may receive only the current question and bounded retrieved evidence.

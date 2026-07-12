@@ -1,0 +1,152 @@
+# doc_manager local stack (Windows Docker Desktop / WSL 2 Linux engine).
+#
+# One documented command:  make up   (or: docker compose up -d --build)
+#
+# Defaults are localhost-only and local-by-default:
+#   - Only the API (and the dev UI) publish a port, bound to 127.0.0.1.
+#   - PostgreSQL and Qdrant are reachable only on the internal compose network.
+#   - PostgreSQL and Qdrant live data use Docker-managed named volumes on local
+#     SSD; they are never bind-mounted to the mapped NAS/SMB drive.
+#   - Source documents mount read-only. External generation is disabled; enable
+#     it deliberately with compose.external-llm.yaml.
+
+name: doc-manager
+
+services:
+  postgres:
+    image: postgres:16
+    environment:
+      POSTGRES_USER: ${DOCMAN_POSTGRES_USER:-docman}
+      POSTGRES_PASSWORD: ${DOCMAN_POSTGRES_PASSWORD:-docman}
+      POSTGRES_DB: ${DOCMAN_POSTGRES_DB:-docman}
+      # Enable page checksums at first cluster initialization (11.2). Applied
+      # only on an empty PGDATA; recreate the volume to change it.
+      POSTGRES_INITDB_ARGS: "--data-checksums"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${DOCMAN_POSTGRES_USER:-docman} -d ${DOCMAN_POSTGRES_DB:-docman}"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+    restart: unless-stopped
+    # No published ports: internal network only.
+
+  qdrant:
+    image: qdrant/qdrant:v1.12.4
+    volumes:
+      - qdrant_data:/qdrant/storage
+    healthcheck:
+      # Qdrant images ship bash; probe the HTTP port without needing curl.
+      test: ["CMD-SHELL", "bash -c ':> /dev/tcp/127.0.0.1/6333' || exit 1"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+    restart: unless-stopped
+    # No published ports: internal network only.
+
+  api:
+    build:
+      context: .
+      dockerfile: deploy/api.Dockerfile
+    env_file:
+      - .env
+    environment:
+      # Bind to all interfaces *inside* the container; the host mapping below
+      # restricts external reachability to 127.0.0.1.
+      DOCMAN_BIND_HOST: "0.0.0.0"
+      DOCMAN_PORT: "8000"
+      DOCMAN_DATABASE_URL: "postgresql+psycopg://${DOCMAN_POSTGRES_USER:-docman}:${DOCMAN_POSTGRES_PASSWORD:-docman}@postgres:5432/${DOCMAN_POSTGRES_DB:-docman}"
+      DOCMAN_QDRANT_URL: "http://qdrant:6333"
+    ports:
+      - "127.0.0.1:${DOCMAN_HOST_PORT:-8000}:8000"
+    depends_on:
+      postgres:
+        condition: service_healthy
+      qdrant:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8000/health/live')"]
+      interval: 15s
+      timeout: 5s
+      retries: 5
+      start_period: 20s
+    restart: unless-stopped
+
+  worker:
+    build:
+      context: .
+      dockerfile: deploy/worker.Dockerfile
+    env_file:
+      - .env
+    environment:
+      DOCMAN_DATABASE_URL: "postgresql+psycopg://${DOCMAN_POSTGRES_USER:-docman}:${DOCMAN_POSTGRES_PASSWORD:-docman}@postgres:5432/${DOCMAN_POSTGRES_DB:-docman}"
+      DOCMAN_QDRANT_URL: "http://qdrant:6333"
+    volumes:
+      # Read-only source documents. The mapped NAS/SMB drive must be connected
+      # before `compose up`. create_host_path:false stops Compose from silently
+      # creating an empty local dir when the path is missing (10, mount preflight).
+      - type: bind
+        source: ${DOCMAN_NAS_DOCUMENTS_HOST_PATH:-./test-data/synthetic/source-roots}
+        target: /sources/nas
+        read_only: true
+        bind:
+          create_host_path: false
+      # Extracted-text artifacts default to a fast local named volume. Switch to
+      # a NAS bind via compose override if immutable NAS artifact storage is used.
+      - artifact_data:/app-data/extracted-text
+    depends_on:
+      postgres:
+        condition: service_healthy
+      qdrant:
+        condition: service_healthy
+    restart: unless-stopped
+
+  # Vite dev server. Not started by default; `docker compose --profile dev up`.
+  # Production serves the built static assets from the API container instead.
+  ui:
+    build:
+      context: .
+      dockerfile: deploy/frontend.Dockerfile
+      target: dev
+    profiles: ["dev"]
+    environment:
+      VITE_API_BASE_URL: "http://127.0.0.1:${DOCMAN_HOST_PORT:-8000}"
+    ports:
+      - "127.0.0.1:5173:5173"
+    depends_on:
+      - api
+
+  # On-demand backup maintenance profile. Not a continuously running service.
+  # `docker compose --profile maintenance run --rm backup /scripts/backup.sh`
+  backup:
+    build:
+      context: .
+      dockerfile: deploy/worker.Dockerfile
+    profiles: ["maintenance"]
+    env_file:
+      - .env
+    environment:
+      DOCMAN_DATABASE_URL: "postgresql+psycopg://${DOCMAN_POSTGRES_USER:-docman}:${DOCMAN_POSTGRES_PASSWORD:-docman}@postgres:5432/${DOCMAN_POSTGRES_DB:-docman}"
+    volumes:
+      - backup_staging:/staging
+      # Writable NAS backup destination — mounted ONLY into this maintenance
+      # service, never into api/worker/postgres/qdrant (12).
+      - type: bind
+        source: ${DOCMAN_NAS_BACKUPS_HOST_PATH:-./.backups}
+        target: /backups
+        bind:
+          create_host_path: false
+      - ./scripts:/scripts:ro
+    depends_on:
+      postgres:
+        condition: service_healthy
+      qdrant:
+        condition: service_healthy
+    entrypoint: ["sleep", "infinity"]
+
+volumes:
+  postgres_data:
+  qdrant_data:
+  backup_staging:
+  artifact_data:
