@@ -32,6 +32,102 @@ The system must run locally. Documents, metadata, embeddings, vector indexes, an
 | OCR fallback | Tesseract or Unstructured, optional | For scanned PDFs/images |
 | Runtime | Docker Compose | Runs Qdrant, PostgreSQL, API, worker, and UI locally |
 
+## Running Locally (Windows + Docker Desktop)
+
+The stack runs as Docker containers (PostgreSQL, Qdrant, API, worker, and an
+optional dev UI). These steps target **native Windows** with **Docker Desktop**
+using the WSL 2 Linux engine and Linux containers. Run the commands from
+**PowerShell** in the repository root unless noted.
+
+### Prerequisites
+
+- **Docker Desktop** running, set to the **WSL 2 Linux engine** / Linux
+  containers. Verify: `docker compose version`.
+- **Ollama** (optional, for the answer/chat step) installed natively on Windows
+  and running (`ollama serve`, then `ollama pull llama3.1:8b`). Containers reach
+  it at `http://host.docker.internal:11434` — already set in `.env.example`.
+  The API/worker start fine without it; the system reports `search_only` until a
+  generation provider is reachable.
+
+### 1. Create the environment file
+
+```powershell
+Copy-Item .env.example .env
+```
+
+Then edit `.env` and set `DOCMAN_POSTGRES_PASSWORD` to a local value (the
+placeholder is `change-me-locally`). Defaults work with **no NAS**: the worker
+mounts the in-repo synthetic corpus at `./test-data/synthetic/source-roots`
+read-only. To index real documents, point `DOCMAN_NAS_DOCUMENTS_HOST_PATH` at a
+Windows path using forward slashes (e.g. `Z:/Documents`); that path must exist
+and carry the sentinel file `.docman-source-id` before startup.
+
+### 2. Build and start the stack
+
+```powershell
+docker compose up -d --build     # postgres, qdrant, api, worker (detached)
+docker compose ps                # service status / health
+docker compose logs -f api worker
+```
+
+- **API:** http://127.0.0.1:8000 (bound to localhost only)
+- PostgreSQL and Qdrant are **internal-only** — no published ports.
+
+### 3. Verify it is up
+
+```powershell
+curl http://127.0.0.1:8000/health/live      # {"status":"alive"}
+curl http://127.0.0.1:8000/health/ready      # 200 once postgres + qdrant are healthy
+curl http://127.0.0.1:8000/api/v1/system/status
+```
+
+`/health/ready` returns **503** until PostgreSQL and Qdrant are up; optional
+generation providers (Ollama/OpenAI) being down does **not** fail readiness.
+
+### 4. Optional: start the dev UI
+
+```powershell
+docker compose --profile dev up -d --build   # Vite dev server
+```
+
+UI at http://127.0.0.1:5173 (proxies `/api` and `/health` to the API). In
+production the API container serves the built static assets instead.
+
+### 5. Stop / reset
+
+```powershell
+docker compose down       # stop, keep data volumes
+docker compose down -v    # stop and DELETE all local data (postgres + qdrant)
+```
+
+### Make shortcuts (Git Bash or WSL)
+
+A `Makefile` wraps these commands. `make` is not available in stock PowerShell;
+run it from **Git Bash** or **WSL**:
+
+```bash
+make up          # docker compose up -d --build (+ copies .env if missing)
+make up-dev      # also start the Vite dev UI
+make ps          # service status
+make logs        # tail api + worker
+make preflight   # ./scripts/check.sh — .env, source mount sentinel, backup path
+make down        # stop (keep volumes)
+make nuke        # stop and delete volumes
+```
+
+### External generation (OpenAI, opt-in)
+
+External generation is **off** by default (`DOCMAN_EXTERNAL_LLM_ENABLED=false`).
+To enable it deliberately, layer the override file — the OpenAI key is mounted as
+a Docker secret, never placed in `.env`:
+
+```powershell
+docker compose -f compose.yaml -f compose.external-llm.yaml up -d --build
+```
+
+See `docs/operations/provider-configuration.md` and
+`docs/operations/runbook.md` for details.
+
 ## Architecture
 
 ```text
