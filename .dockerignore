@@ -1,0 +1,29 @@
+# Keep the Docker build context small and platform-clean. Host virtualenvs and
+# node_modules are Linux/Windows-specific and are rebuilt inside the image; the
+# uv-created `.venv/lib64` symlink also breaks context packing on Windows.
+
+# Python
+**/.venv
+**/__pycache__
+**/*.pyc
+**/.pytest_cache
+**/.mypy_cache
+**/.ruff_cache
+
+# Node / frontend
+**/node_modules
+frontend/dist
+**/*.tsbuildinfo
+
+# VCS / editor / OS
+.git
+.gitignore
+.gitattributes
+**/.DS_Store
+
+# Local runtime data and secrets (never bake into an image)
+.env
+.env.*
+!.env.example
+.backups/
+test-data/**/tmp/

@@ -1,0 +1,24 @@
+# External-generation override. Deliberately separate from compose.yaml so that
+# enabling an external provider is an explicit deployment action requiring both
+# this override AND per-source external-generation permission (5.13, 10).
+#
+#   docker compose -f compose.yaml -f compose.external-llm.yaml up -d
+#
+# DOCMAN_OPENAI_API_KEY_HOST_FILE must point at an ACL-protected file OUTSIDE the
+# repository. The key is mounted as a Docker secret into the API service only —
+# never the worker, database, UI, logs, or backups. store=false is enforced in
+# the adapter, not here.
+
+services:
+  api:
+    environment:
+      DOCMAN_EXTERNAL_LLM_ENABLED: "true"
+      DOCMAN_GENERATION_PROVIDER: "openai"
+      DOCMAN_OPENAI_MODEL: ${DOCMAN_OPENAI_MODEL:?set the OpenAI model id}
+      DOCMAN_OPENAI_API_KEY_FILE: "/run/secrets/openai_api_key"
+    secrets:
+      - openai_api_key
+
+secrets:
+  openai_api_key:
+    file: ${DOCMAN_OPENAI_API_KEY_HOST_FILE:?set path to an ACL-protected key file outside the repo}

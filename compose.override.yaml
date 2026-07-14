@@ -1,0 +1,16 @@
+# Local development overrides — auto-loaded by `docker compose` on top of
+# compose.yaml. Publishes the otherwise-internal databases to localhost ONLY so
+# host GUI tools (psql/pgAdmin/DBeaver, Qdrant dashboard) can connect.
+#
+# Do NOT commit LAN-exposed bindings. The 127.0.0.1: prefix keeps these reachable
+# only from this machine. Production uses compose.yaml alone (no published DBs).
+
+services:
+  postgres:
+    ports:
+      - "127.0.0.1:5432:5432"
+
+  qdrant:
+    ports:
+      - "127.0.0.1:6333:6333"   # HTTP API + web dashboard (/dashboard)
+      - "127.0.0.1:6334:6334"   # gRPC
