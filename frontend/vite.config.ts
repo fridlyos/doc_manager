@@ -1,18 +1,23 @@
 import { defineConfig } from "vite";
 import react from "@vitejs/plugin-react";
 
-// Local-only dev server. The API base URL is injected via VITE_API_BASE_URL so
-// no host is hard-coded. Production serves the built ./dist from the API.
+// Local-only dev server. The client calls relative /api and /health paths and
+// this dev server proxies them to the backend, so the browser stays same-origin
+// (no CORS). Production serves the built ./dist from the API.
+//
+// Proxy target is env-driven so the same config works in both contexts:
+//   - host `npm run dev`      -> default http://127.0.0.1:8000 (published API)
+//   - containerized ui service -> API_PROXY_TARGET=http://api:8000 (compose net)
+const apiProxyTarget = process.env.API_PROXY_TARGET ?? "http://127.0.0.1:8000";
+
 export default defineConfig({
   plugins: [react()],
   server: {
     host: "127.0.0.1",
     port: 5173,
-    // Dev-only: proxy API + health calls to the backend so the browser stays
-    // same-origin (no CORS needed). Production serves the built UI from the API.
     proxy: {
-      "/api": { target: "http://127.0.0.1:8000", changeOrigin: true },
-      "/health": { target: "http://127.0.0.1:8000", changeOrigin: true },
+      "/api": { target: apiProxyTarget, changeOrigin: true },
+      "/health": { target: apiProxyTarget, changeOrigin: true },
     },
   },
   test: {

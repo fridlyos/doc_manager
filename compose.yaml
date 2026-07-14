@@ -111,7 +111,12 @@ services:
       target: dev
     profiles: ["dev"]
     environment:
-      VITE_API_BASE_URL: "http://127.0.0.1:${DOCMAN_HOST_PORT:-8000}"
+      # Empty base URL -> the client calls relative /api and /health, which the
+      # Vite dev server proxies to the api service (same-origin, no CORS). The
+      # proxy target must be the compose service name, not 127.0.0.1 (that would
+      # resolve to this ui container).
+      VITE_API_BASE_URL: ""
+      API_PROXY_TARGET: "http://api:8000"
     ports:
       - "127.0.0.1:5173:5173"
     depends_on:
