@@ -23,12 +23,20 @@ export function SystemStatusPage() {
         <dt>Generation provider</dt>
         <dd>
           {data.generation_provider}{" "}
-          <span className={data.external_llm_enabled ? "badge badge-external" : "badge badge-local"}>
+          <span
+            className={data.external_llm_enabled ? "badge badge-external" : "badge badge-local"}
+          >
             {data.external_llm_enabled ? "External enabled" : "Local"}
           </span>
         </dd>
         <dt>Mode</dt>
-        <dd>{data.ready ? (data.search_only ? "Search-only (no provider ready)" : "Ready") : "Not ready"}</dd>
+        <dd>
+          {data.ready
+            ? data.search_only
+              ? "Search-only (no provider ready)"
+              : "Ready"
+            : "Not ready"}
+        </dd>
       </dl>
 
       <table className="components">

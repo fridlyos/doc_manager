@@ -27,6 +27,12 @@ class GenerationProvider(StrEnum):
     openai = "openai"
 
 
+class FilesystemProfile(StrEnum):
+    auto = "auto"
+    windows = "windows"
+    unix = "unix"
+
+
 class Settings(BaseSettings):
     """Deployment-level settings.
 
@@ -72,6 +78,7 @@ class Settings(BaseSettings):
     # --- Embeddings + artifacts ---
     embedding_model: str = "BAAI/bge-small-en-v1.5"
     artifact_root: Path = Path("/app-data/extracted-text")
+    frontend_dist: Path = Path("/app/frontend-dist")
     allowed_source_roots: str = "/sources"
 
     # --- NAS / mounts ---
@@ -79,6 +86,9 @@ class Settings(BaseSettings):
     nas_artifacts_host_path: str | None = None
     nas_backups_host_path: str | None = None
     nas_mount_sentinel: str = ".docman-source-id"
+    # Filesystem profile drives default path style and the folder-picker mode.
+    # "auto" resolves from the host OS at runtime (see resolved_filesystem_profile).
+    filesystem_profile: FilesystemProfile = FilesystemProfile.auto
 
     # --- Backup ---
     backup_root: Path = Path("/backups")
@@ -89,7 +99,17 @@ class Settings(BaseSettings):
     # --- Runtime ---
     log_level: str = "INFO"
     worker_concurrency: int = 1
-    job_lease_seconds: int = 300
+    # Lease/heartbeat defaults per the job state-machine contract (sec. 5):
+    # 90 s lease, heartbeat at most every 20 s (must stay under lease/3).
+    job_lease_seconds: int = 90
+    job_heartbeat_seconds: int = 20
+    job_poll_interval_seconds: float = 2.0
+    job_max_attempts: int = 3
+    job_retry_base_delay_seconds: float = 5.0
+    job_retry_max_delay_seconds: float = 900.0
+    reaper_interval_seconds: float = 15.0
+    scheduler_interval_seconds: float = 60.0
+    worker_shutdown_grace_seconds: float = 25.0
     chunk_target_tokens: int = 750
     chunk_overlap_tokens: int = 100
     search_top_k: int = 12
@@ -113,6 +133,15 @@ class Settings(BaseSettings):
     @property
     def allowed_source_root_paths(self) -> list[Path]:
         return [Path(p.strip()) for p in self.allowed_source_roots.split(",") if p.strip()]
+
+    @property
+    def resolved_filesystem_profile(self) -> str:
+        """ "windows" or "unix" — resolves "auto" from the host OS at runtime."""
+        if self.filesystem_profile is not FilesystemProfile.auto:
+            return self.filesystem_profile.value
+        import platform
+
+        return "windows" if platform.system() == "Windows" else "unix"
 
     @property
     def external_provider_allowlist_set(self) -> set[str]:

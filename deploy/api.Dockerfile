@@ -1,6 +1,13 @@
 # syntax=docker/dockerfile:1
-# API image. Serves the FastAPI app (and, in production, the built frontend
-# static assets). Pin the base digest before first production data.
+# API image. Serves the FastAPI app and the built frontend static assets.
+# Pin the base digests before first production data.
+FROM node:22-slim AS frontend-build
+WORKDIR /frontend
+COPY frontend/package.json frontend/package-lock.json* ./
+RUN npm ci
+COPY frontend/ ./
+RUN npm run build
+
 FROM python:3.12-slim AS base
 
 ENV PYTHONUNBUFFERED=1 \
@@ -24,6 +31,8 @@ RUN --mount=type=cache,target=/root/.cache/uv \
 COPY backend/ ./
 RUN --mount=type=cache,target=/root/.cache/uv \
     uv sync --frozen --no-dev
+
+COPY --from=frontend-build /frontend/dist /app/frontend-dist
 
 # Drop privileges.
 RUN useradd --uid 10001 --create-home appuser
