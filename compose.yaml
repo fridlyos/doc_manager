@@ -68,9 +68,12 @@ services:
         read_only: true
         bind:
           create_host_path: false
-      # Windows filesystem (C: via WSL /mnt/c) exposed read-only for browsing.
+      # Expose only the host filesystem used to launch Compose. On native
+      # Windows, SystemDrive resolves this to C:/; from WSL it falls back to
+      # the Compose working directory. DOCMAN_WINDOWS_HOST_PATH can override
+      # either root when a different folder should be visible.
       - type: bind
-        source: ${DOCMAN_WINDOWS_HOST_PATH:-/mnt/c}
+        source: ${DOCMAN_WINDOWS_HOST_PATH:-${SystemDrive:-.}/}
         target: /hostfs
         read_only: true
         bind:
@@ -109,10 +112,10 @@ services:
         read_only: true
         bind:
           create_host_path: false
-      # Windows filesystem (C: via WSL /mnt/c) exposed read-only so the worker
-      # can scan Windows-hosted folders picked through the browser.
+      # Mirror the API's active host filesystem mount so scans use the same
+      # paths the browser can select.
       - type: bind
-        source: ${DOCMAN_WINDOWS_HOST_PATH:-/mnt/c}
+        source: ${DOCMAN_WINDOWS_HOST_PATH:-${SystemDrive:-.}/}
         target: /hostfs
         read_only: true
         bind:

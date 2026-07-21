@@ -32,12 +32,13 @@ The system must run locally. Documents, metadata, embeddings, vector indexes, an
 | OCR fallback | Tesseract or Unstructured, optional | For scanned PDFs/images |
 | Runtime | Docker Compose | Runs Qdrant, PostgreSQL, API, worker, and UI locally |
 
-## Running Locally (Windows + Docker Desktop)
+## Running Locally (Windows or WSL + Docker Desktop)
 
 The stack runs as Docker containers (PostgreSQL, Qdrant, API, worker, and an
-optional dev UI). These steps target **native Windows** with **Docker Desktop**
-using the WSL 2 Linux engine and Linux containers. Run the commands from
-**PowerShell** in the repository root unless noted.
+optional dev UI). These steps support **native Windows** with **Docker Desktop**
+using the WSL 2 Linux engine and Linux containers, or a Docker-integrated WSL
+terminal. Run the commands from **PowerShell** or the WSL terminal in the
+repository root.
 
 ### Prerequisites
 
@@ -59,8 +60,16 @@ Then edit `.env` and set `DOCMAN_POSTGRES_PASSWORD` to a local value (the
 placeholder is `change-me-locally`). Defaults work with **no NAS**: the worker
 mounts the in-repo synthetic corpus at `./test-data/synthetic/source-roots`
 read-only. To index real documents, point `DOCMAN_NAS_DOCUMENTS_HOST_PATH` at a
-Windows path using forward slashes (e.g. `Z:/Documents`); that path must exist
-and carry the sentinel file `.docman-source-id` before startup.
+host path understood by the environment running Compose (for example,
+`Z:/Documents` from PowerShell or `/mnt/z/Documents` from WSL); that path must
+exist and carry the sentinel file `.docman-source-id` before startup.
+
+The `/hostfs` browsing mount is host-aware: native Windows Compose exposes
+`C:/`, while WSL Compose exposes the current Linux workspace. Only the active
+host's folder tree is available to the browser. To expose another WSL folder,
+set `DOCMAN_WINDOWS_HOST_PATH` to an absolute Linux path such as
+`/home/<you>/Documents`; from PowerShell, use a Windows path such as
+`C:/Users/<you>/Documents`.
 
 ### 2. Build and start the stack
 
@@ -517,51 +526,10 @@ GET  /api/v1/jobs/{id}
 
 ## MVP Milestones
 
-### Phase 1: Local Infrastructure
-
-- Docker Compose for PostgreSQL and Qdrant
-- Basic FastAPI app
-- Basic health checks
-- Database migrations
-
-### Phase 2: Indexing Pipeline
-
-- Configure one document location
-- Scan files
-- Extract PDF/text content
-- Chunk text
-- Generate local embeddings
-- Store metadata in PostgreSQL
-- Store vectors in Qdrant
-
-### Phase 3: Search and Ask
-
-- Semantic search endpoint
-- Ollama answer endpoint
-- Return answer with paths, pages, and snippets
-- Basic CLI or minimal web form
-
-### Phase 4: UI
-
-- Chat/search page
-- Document catalog page
-- Indexing status page
-- Failed document/error page
-
-### Phase 5: Re-indexing and Duplicates
-
-- Scheduled scans
-- Change detection
-- Re-index changed files
-- Tombstone deleted files
-- Duplicate detection by file hash and text hash
-
-### Phase 6: Multi-location Cataloging
-
-- Multiple source locations
-- Cross-location duplicate report
-- Missing-copy report
-- Optional sync planning/dry-run
+Implementation phases (0-8) are tracked in `TECHSTACK.md` section 14, which is
+the source of truth for scope and exit criteria per phase. Progress and
+per-phase status notes live in the corresponding `PHASE<N>_STATUS.md` files at
+the repo root.
 
 ## Open Decisions
 
