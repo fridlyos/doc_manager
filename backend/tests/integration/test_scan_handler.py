@@ -2,7 +2,9 @@
 
 from __future__ import annotations
 
+import os
 import uuid
+from datetime import UTC, datetime
 from pathlib import Path
 
 import pytest
@@ -56,7 +58,12 @@ async def run_scan(
     async with db_engine.connect() as conn:
         session = AsyncSession(bind=conn, expire_on_commit=False)
         try:
-            claim = await engine.claim_next(session, worker_id="scan-w", lease_seconds=60)
+            claim = await engine.claim_next(
+                session,
+                worker_id="scan-w",
+                lease_seconds=60,
+                job_types=(JobType.scan_location,),
+            )
             assert claim.job is not None and claim.job.lease_token is not None
             ctx = JobContext(
                 session=session,
@@ -209,3 +216,64 @@ async def test_exclude_globs_and_extension_filter(
     async with session_factory() as session:
         entries = await entries_by_path(session, location.id)
         assert set(entries) == {"notes.md"}
+
+
+async def test_rename_is_detected_as_move(
+    tmp_path: Path,
+    db_engine: AsyncEngine,
+    session_factory: async_sessionmaker[AsyncSession],
+) -> None:
+    build_corpus(tmp_path)
+    async with session_factory() as session:
+        location = await create_location(session, tmp_path)
+    await run_scan(db_engine, session_factory, location.id)
+    async with session_factory() as session:
+        original_id = (await entries_by_path(session, location.id))["notes.md"].id
+
+    # Rename without changing content: same bytes at a new path.
+    (tmp_path / "notes.md").rename(tmp_path / "renamed.md")
+    await run_scan(db_engine, session_factory, location.id)
+
+    async with session_factory() as session:
+        entries = await entries_by_path(session, location.id)
+        assert "notes.md" not in entries
+        assert "renamed.md" in entries
+        # Same catalog row retargeted — not a new add plus a missing old entry.
+        assert entries["renamed.md"].id == original_id
+        assert entries["renamed.md"].state != CatalogEntryState.missing.value
+
+
+async def test_mtime_touch_does_not_requeue_but_edit_does(
+    tmp_path: Path,
+    db_engine: AsyncEngine,
+    session_factory: async_sessionmaker[AsyncSession],
+) -> None:
+    build_corpus(tmp_path)
+    async with session_factory() as session:
+        location = await create_location(session, tmp_path)
+    await run_scan(db_engine, session_factory, location.id)
+
+    # Pretend the file was already indexed, then only touch its mtime.
+    async with session_factory() as session:
+        await session.execute(
+            text(
+                "UPDATE catalog_entries SET state = 'indexed'"
+                " WHERE source_location_id = :i AND relative_path = 'notes.md'"
+            ),
+            {"i": location.id},
+        )
+        await session.commit()
+    future = datetime(2030, 1, 1, tzinfo=UTC).timestamp()
+    os.utime(tmp_path / "notes.md", (future, future))
+    await run_scan(db_engine, session_factory, location.id)
+    async with session_factory() as session:
+        entry = (await entries_by_path(session, location.id))["notes.md"]
+        # Identical bytes: no re-index, indexed state preserved.
+        assert entry.state == CatalogEntryState.indexed.value
+
+    # Now actually edit the content: it must be requeued.
+    (tmp_path / "notes.md").write_text("# notes, materially changed")
+    await run_scan(db_engine, session_factory, location.id)
+    async with session_factory() as session:
+        entry = (await entries_by_path(session, location.id))["notes.md"]
+        assert entry.state == CatalogEntryState.discovered.value

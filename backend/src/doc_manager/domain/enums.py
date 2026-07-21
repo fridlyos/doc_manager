@@ -77,6 +77,13 @@ class CatalogEntryState(StrEnum):
     unsupported = "unsupported"
 
 
+class ExtractionStatus(StrEnum):
+    pending = "pending"
+    extracted = "extracted"
+    failed = "failed"
+    unsupported = "unsupported"
+
+
 class ExternalGenerationPolicy(StrEnum):
     deny = "deny"
     allow = "allow"

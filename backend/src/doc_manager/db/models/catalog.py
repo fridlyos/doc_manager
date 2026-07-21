@@ -42,10 +42,17 @@ class CatalogEntry(Base):
     extension: Mapped[str] = mapped_column(String(32))
     mime_type: Mapped[str | None] = mapped_column(String(255), default=None)
     state: Mapped[str] = mapped_column(String(20), default=CatalogEntryState.discovered.value)
-    # Latest scan observation, denormalized. Phase 3 adds file_versions with
-    # sha256 as the content authority; size/mtime remain the fast change signal.
+    # Latest scan observation, denormalized. Phase 3.a adds sha256 as the content
+    # authority; size/mtime remain the fast change signal. Full file_versions
+    # (content_object linkage, extraction status) arrive with extraction (3.b).
     last_observed_size_bytes: Mapped[int | None] = mapped_column(BigInteger, default=None)
     last_observed_mtime: Mapped[datetime | None] = mapped_column(default=None)
+    # SHA-256 of the current content; NULL for entries observed before hashing
+    # landed (a first Phase 3 scan hashes and backfills them).
+    sha256: Mapped[str | None] = mapped_column(String(64), default=None)
+    # The file_version reflecting the entry's current bytes; set once indexing
+    # runs. FK added out-of-line in the migration (circular with file_versions).
+    current_file_version_id: Mapped[uuid.UUID | None] = mapped_column(default=None)
     first_seen_at: Mapped[datetime] = mapped_column(server_default=func.clock_timestamp())
     last_seen_at: Mapped[datetime] = mapped_column(server_default=func.clock_timestamp())
     missing_since: Mapped[datetime | None] = mapped_column(default=None)
@@ -71,4 +78,7 @@ class ScanObservation(Base):
     extension: Mapped[str] = mapped_column(String(32))
     size_bytes: Mapped[int] = mapped_column(BigInteger)
     mtime: Mapped[datetime] = mapped_column()
+    # Content hash of the observed file. Carried from the catalog when size+mtime
+    # are unchanged (fast path), otherwise freshly computed during enumeration.
+    sha256: Mapped[str] = mapped_column(String(64))
     staged_at: Mapped[datetime] = mapped_column(server_default=func.clock_timestamp())
