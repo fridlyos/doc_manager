@@ -58,6 +58,23 @@ services:
       DOCMAN_PORT: "8000"
       DOCMAN_DATABASE_URL: "postgresql+psycopg://${DOCMAN_POSTGRES_USER:-docman}:${DOCMAN_POSTGRES_PASSWORD:-docman}@postgres:5432/${DOCMAN_POSTGRES_DB:-docman}"
       DOCMAN_QDRANT_URL: "http://qdrant:6333"
+    volumes:
+      # Read-only source mount so the folder-browse endpoint can list scan roots.
+      # Mirrors the worker's mount; create_host_path:false fails loudly if the
+      # NAS/mapped drive is disconnected rather than browsing an empty placeholder.
+      - type: bind
+        source: ${DOCMAN_NAS_DOCUMENTS_HOST_PATH:-./test-data/synthetic/source-roots}
+        target: /sources/nas
+        read_only: true
+        bind:
+          create_host_path: false
+      # Windows filesystem (C: via WSL /mnt/c) exposed read-only for browsing.
+      - type: bind
+        source: ${DOCMAN_WINDOWS_HOST_PATH:-/mnt/c}
+        target: /hostfs
+        read_only: true
+        bind:
+          create_host_path: false
     ports:
       - "127.0.0.1:${DOCMAN_HOST_PORT:-8000}:8000"
     depends_on:
@@ -89,6 +106,14 @@ services:
       - type: bind
         source: ${DOCMAN_NAS_DOCUMENTS_HOST_PATH:-./test-data/synthetic/source-roots}
         target: /sources/nas
+        read_only: true
+        bind:
+          create_host_path: false
+      # Windows filesystem (C: via WSL /mnt/c) exposed read-only so the worker
+      # can scan Windows-hosted folders picked through the browser.
+      - type: bind
+        source: ${DOCMAN_WINDOWS_HOST_PATH:-/mnt/c}
+        target: /hostfs
         read_only: true
         bind:
           create_host_path: false

@@ -1,7 +1,7 @@
 """Versioned API router.
 
-Phase 1 exposes only system status. Locations, documents, search, ask, jobs,
-duplicates, and sync-plan routes are added in later phases (TECHSTACK section 8).
+Phase 2 adds locations and jobs. Documents, search, ask, duplicates, and
+sync-plan routes are added in later phases (TECHSTACK section 8).
 """
 
 from __future__ import annotations
@@ -11,10 +11,14 @@ from typing import Any
 from fastapi import APIRouter
 
 from doc_manager import __version__
+from doc_manager.api.v1.routes.jobs import router as jobs_router
+from doc_manager.api.v1.routes.locations import router as locations_router
 from doc_manager.core.config import get_settings
 from doc_manager.health import build_readiness
 
 router = APIRouter(prefix="/api/v1")
+router.include_router(locations_router)
+router.include_router(jobs_router)
 
 
 @router.get("/system/status", tags=["system"])
@@ -26,6 +30,7 @@ async def system_status() -> dict[str, Any]:
         "environment": settings.env.value,
         "generation_provider": settings.generation_provider.value,
         "external_llm_enabled": settings.external_llm_enabled,
+        "filesystem_profile": settings.resolved_filesystem_profile,
         "ready": report.ready,
         "search_only": report.search_only,
         "components": [

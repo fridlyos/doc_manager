@@ -493,17 +493,17 @@ nginx      # reverse proxy, only if exposing to LAN users
 
 ```text
 GET  /health
-GET  /locations
-POST /locations
-POST /locations/{id}/scan
-GET  /documents
-GET  /documents/{id}
-POST /documents/{id}/reindex
-GET  /duplicates
-POST /search
-POST /ask
-GET  /jobs
-GET  /jobs/{id}
+GET  /api/v1/locations
+POST /api/v1/locations
+POST /api/v1/locations/{id}/scan
+GET  /api/v1/documents
+GET  /api/v1/documents/{id}
+POST /api/v1/documents/{id}/reindex
+GET  /api/v1/duplicates
+POST /api/v1/search
+POST /api/v1/ask
+GET  /api/v1/jobs
+GET  /api/v1/jobs/{id}
 ```
 
 ## Security and Privacy

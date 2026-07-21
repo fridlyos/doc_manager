@@ -1,4 +1,4 @@
-import { Outlet } from "react-router-dom";
+import { NavLink, Outlet } from "react-router-dom";
 
 export function App() {
   return (
@@ -6,6 +6,11 @@ export function App() {
       <header className="app-header">
         <h1>doc_manager</h1>
         <span className="app-badge">local</span>
+        <nav aria-label="Primary navigation">
+          <NavLink to="/">Status</NavLink>
+          <NavLink to="/locations">Locations</NavLink>
+          <NavLink to="/jobs">Jobs</NavLink>
+        </nav>
       </header>
       <main className="app-main">
         <Outlet />

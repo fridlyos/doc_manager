@@ -4,17 +4,21 @@ import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { RouterProvider, createBrowserRouter } from "react-router-dom";
 import { App } from "./app/App";
 import { SystemStatusPage } from "./pages/SystemStatusPage";
+import { JobsPage } from "./pages/JobsPage";
+import { LocationsPage } from "./pages/LocationsPage";
 import "./styles/global.css";
 
 const queryClient = new QueryClient();
 
-// Phase 1 exposes only the System Status page. Search, Ask, Catalog, Duplicates,
-// Locations, Jobs, Errors, and Sync arrive in later phases (TECHSTACK 5.16).
 const router = createBrowserRouter([
   {
     path: "/",
     element: <App />,
-    children: [{ index: true, element: <SystemStatusPage /> }],
+    children: [
+      { index: true, element: <SystemStatusPage /> },
+      { path: "locations", element: <LocationsPage /> },
+      { path: "jobs", element: <JobsPage /> },
+    ],
   },
 ]);
 

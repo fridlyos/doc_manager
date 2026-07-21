@@ -1,8 +1,7 @@
 """Alembic environment.
 
-Phase 1 provides the migration harness only; the first schema revision lands in
-Phase 2. ``target_metadata`` stays ``None`` until the SQLAlchemy models exist.
 The database URL is read from application settings so it is never committed.
+``target_metadata`` is the full model metadata; autogenerate diffs against it.
 """
 
 from __future__ import annotations
@@ -11,6 +10,7 @@ from alembic import context
 from sqlalchemy import engine_from_config, pool
 
 from doc_manager.core.config import get_settings
+from doc_manager.db.models import Base
 
 config = context.config
 
@@ -19,7 +19,7 @@ config = context.config
 _url = str(get_settings().database_url).replace("+psycopg", "+psycopg")
 config.set_main_option("sqlalchemy.url", _url)
 
-target_metadata = None
+target_metadata = Base.metadata
 
 
 def run_migrations_offline() -> None:
