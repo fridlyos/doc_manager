@@ -29,6 +29,29 @@ async def get_session(request: Request) -> AsyncIterator[AsyncSession]:
         yield session
 
 
+def get_retrieval_service(request: Request) -> Any:
+    """The process-shared retrieval service (loads the embedding model once).
+
+    Built lazily on first search and cached on ``app.state`` so the FastEmbed model
+    loads at most once per process. Tests inject a fake by pre-setting
+    ``app.state.retrieval_service``.
+    """
+    existing = getattr(request.app.state, "retrieval_service", None)
+    if existing is not None:
+        return existing
+    # Imported here to keep the heavy embedding/vector stack out of import time.
+    from doc_manager.embedding import build_embedding_service
+    from doc_manager.retrieval import RetrievalService
+    from doc_manager.vectors import build_qdrant_repository
+
+    settings: Settings = request.app.state.settings
+    embedding = build_embedding_service(settings)
+    repo = build_qdrant_repository(settings, embedding.profile)
+    service = RetrievalService(embedding, repo)
+    request.app.state.retrieval_service = service
+    return service
+
+
 def require_idempotency_key(request: Request) -> str:
     """Job-creating POSTs require Idempotency-Key (contract section 6.1)."""
     key = request.headers.get("Idempotency-Key")

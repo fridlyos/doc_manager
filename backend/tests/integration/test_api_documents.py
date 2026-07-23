@@ -33,7 +33,7 @@ pytestmark = pytest.mark.usefixtures("pg_url")
 _TRUNCATE = (
     "TRUNCATE scan_observations, job_events, job_checkpoints,"
     " ingestion_job_attempts, idempotency_records, ingestion_jobs,"
-    " file_versions, content_objects, catalog_entries,"
+    " chunks, file_versions, content_objects, catalog_entries,"
     " source_locations, scheduler_state CASCADE"
 )
 

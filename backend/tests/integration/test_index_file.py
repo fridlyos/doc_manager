@@ -7,11 +7,11 @@ from pathlib import Path
 
 import pymupdf
 import pytest
-from sqlalchemy import select
+from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncEngine, AsyncSession, async_sessionmaker
 
 from doc_manager.core.config import Settings
-from doc_manager.db.models import CatalogEntry, ContentObject, FileVersion, SourceLocation
+from doc_manager.db.models import CatalogEntry, Chunk, ContentObject, FileVersion, SourceLocation
 from doc_manager.domain.enums import (
     CatalogEntryState,
     ExtractionStatus,
@@ -27,7 +27,10 @@ pytestmark = pytest.mark.usefixtures("pg_url")
 
 
 @pytest.fixture
-def artifact_root(tmp_path: Path, pg_url: str, monkeypatch: pytest.MonkeyPatch) -> Path:
+def artifact_root(
+    tmp_path: Path, pg_url: str, monkeypatch: pytest.MonkeyPatch, vector_env: object
+) -> Path:
+    # vector_env patches the embedding + Qdrant builders to offline fakes.
     root = tmp_path / "artifacts"
     settings = Settings(database_url=pg_url, artifact_root=root)
     monkeypatch.setattr("doc_manager.jobs.handlers.index_file.get_settings", lambda: settings)
@@ -228,3 +231,69 @@ async def test_identical_files_share_one_content_object(
         versions = (await session.scalars(select(FileVersion))).all()
         assert len(versions) == 2
         assert {v.content_object_id for v in versions} == {content[0].id}
+        # Chunks/points are keyed on the content object, so the duplicate reuses
+        # them — one set, embedded once.
+        chunk_rows = (
+            await session.scalars(
+                select(func.count())
+                .select_from(Chunk)
+                .where(Chunk.content_object_id == content[0].id)
+            )
+        ).one()
+        assert chunk_rows >= 1
+
+
+async def _count_points(client: object, collection: str) -> int:
+    from qdrant_client import AsyncQdrantClient
+
+    assert isinstance(client, AsyncQdrantClient)
+    if not await client.collection_exists(collection):
+        return 0
+    return (await client.count(collection)).count
+
+
+async def test_indexing_persists_chunks_and_points(
+    tmp_path: Path,
+    db_engine: AsyncEngine,
+    session_factory: async_sessionmaker[AsyncSession],
+    artifact_root: Path,
+    vector_env: object,
+) -> None:
+    (tmp_path / "doc.txt").write_text("the renewal clause covers december terms")
+    location = await _make_location(session_factory, tmp_path)
+    engine = JobEngine()
+    await _scan_and_index(engine, db_engine, session_factory, location.id)
+
+    collection = vector_env.embedding.profile.collection_name("doc_chunks")  # type: ignore[attr-defined]
+    async with session_factory() as session:
+        chunks = (await session.scalars(select(Chunk))).all()
+        assert len(chunks) >= 1
+        assert all(c.token_count > 0 for c in chunks)
+        # One vector point per SQL chunk row.
+        assert await _count_points(vector_env.client, collection) == len(chunks)  # type: ignore[attr-defined]
+
+
+async def test_reindex_creates_no_duplicate_chunks_or_points(
+    tmp_path: Path,
+    db_engine: AsyncEngine,
+    session_factory: async_sessionmaker[AsyncSession],
+    artifact_root: Path,
+    vector_env: object,
+) -> None:
+    (tmp_path / "doc.txt").write_text("alpha beta gamma delta epsilon zeta")
+    location = await _make_location(session_factory, tmp_path)
+    engine = JobEngine()
+    await _scan_and_index(engine, db_engine, session_factory, location.id)
+
+    collection = vector_env.embedding.profile.collection_name("doc_chunks")  # type: ignore[attr-defined]
+    async with session_factory() as session:
+        first_chunks = (await session.scalars(select(func.count()).select_from(Chunk))).one()
+    first_points = await _count_points(vector_env.client, collection)  # type: ignore[attr-defined]
+
+    # Re-index the same, unchanged file: deterministic ids -> idempotent upsert.
+    await _scan_and_index(engine, db_engine, session_factory, location.id)
+
+    async with session_factory() as session:
+        second_chunks = (await session.scalars(select(func.count()).select_from(Chunk))).one()
+    second_points = await _count_points(vector_env.client, collection)  # type: ignore[attr-defined]
+    assert (second_chunks, second_points) == (first_chunks, first_points)

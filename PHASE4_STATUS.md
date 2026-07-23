@@ -14,9 +14,9 @@ Scope = TECHSTACK §14 "Phase 4: Chunking, Embeddings, and Vector Search".
 | 4.a | Deterministic page-aware chunking | **✅ complete** |
 | 4.b | FastEmbed adapter + embedding-profile validation | **✅ complete** |
 | 4.c | Qdrant collection lifecycle + idempotent point operations | **✅ complete** |
-| 4.d | `/search` with filters, thresholds, snippets, pages, current paths | ⬜ not started |
+| 4.d | `/search` with filters, thresholds, snippets, pages, current paths | **✅ complete** |
 | 4.e | Search UI + vector/catalog consistency check | ⬜ not started |
-| — | **Integration: extend `index_file` with chunk → embed → upsert** | ⬜ not started |
+| — | **Integration: extend `index_file` with chunk → embed → upsert** | **✅ complete** |
 
 ## Exit criteria (whole phase)
 
@@ -96,6 +96,25 @@ the 1.18-vs-1.12.4 incompatibility warning. **Full report:
 
 Resolves open decisions #2 (point identity) and #4 (filter placement: SQL →
 content-object allow-set; Qdrant filters only on `content_object_id`).
+
+### 4.d — `/search`, chunk persistence, indexing integration ✅ (2026-07-22)
+
+Delivered: `chunks` SQL table + migration `0004` (metadata only; deterministic PK;
+round-trip verified); `index_file` now chunks → embeds → `ensure_collection` →
+upserts points → persists chunk rows inside the fenced publish transaction, with a
+reuse check so a duplicate file skips re-embedding; `retrieval/` (`RetrievalService`
+— SQL filter → content-object allow-set, query embed, Qdrant search, path/state
+resolution from PostgreSQL) + shared `core.display.display_path`; `POST
+/api/v1/search` (typed filters, bounded `top_k`/threshold, result envelope, **no
+generation provider**) + `serialize_search_result`. 15 new tests (9 endpoint unit,
+2 indexing incl. **no-duplicate re-index**, 4 retrieval incl. **golden query** and
+**moved-file path resolution**); full backend suite **159 pass**; ruff/mypy clean.
+Real-stack smoke (real bge-small + real Qdrant): renewal doc ranks first
+(0.675 vs 0.388). **Full report: `docs/architecture/phase-4d-search.md`.**
+
+Exit criteria met: (1) re-index creates no duplicate chunks/points; (2) a golden
+query retrieves the expected synthetic evidence; (3) search runs with no generation
+provider. Only 4.e (search UI + consistency check) remains in Phase 4.
 
 ---
 

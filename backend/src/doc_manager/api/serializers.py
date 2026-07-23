@@ -5,6 +5,7 @@ from __future__ import annotations
 from typing import Any
 
 from doc_manager.api.envelope import iso_utc
+from doc_manager.core.display import display_path
 from doc_manager.db.models import (
     CatalogEntry,
     ContentObject,
@@ -12,11 +13,8 @@ from doc_manager.db.models import (
     IngestionJob,
     SourceLocation,
 )
-from doc_manager.domain.enums import ErrorClass, PathStyle
-
-_WINDOWS_STYLES = frozenset(
-    {PathStyle.windows.value, PathStyle.mapped_drive.value, PathStyle.unc.value}
-)
+from doc_manager.domain.enums import ErrorClass
+from doc_manager.retrieval import SearchResult
 
 
 def location_etag(location: SourceLocation) -> str:
@@ -24,17 +22,7 @@ def location_etag(location: SourceLocation) -> str:
 
 
 def _display_path(location: SourceLocation, relative_path: str) -> str:
-    """Join the location's display root with a stored (posix) relative path.
-
-    The only path field an endpoint may return (contract sec. 5). Windows-style
-    locations render backslash separators; posix locations keep forward slashes.
-    """
-    if location.path_style in _WINDOWS_STYLES:
-        rel = relative_path.replace("/", "\\")
-        root = location.display_root.rstrip("\\/")
-        return f"{root}\\{rel}" if rel else root
-    root = location.display_root.rstrip("/")
-    return f"{root}/{relative_path}" if relative_path else root
+    return display_path(location.path_style, location.display_root, relative_path)
 
 
 def serialize_document(
@@ -106,6 +94,30 @@ def serialize_location(location: SourceLocation) -> dict[str, Any]:
         "revision": location.revision,
         "created_at": iso_utc(location.created_at),
         "updated_at": iso_utc(location.updated_at),
+    }
+
+
+def serialize_search_result(result: SearchResult) -> dict[str, Any]:
+    """Project a retrieval hit. ``similarity_score`` is comparable only within one
+    embedding profile; paths are the current server-resolved display paths."""
+    return {
+        "chunk_id": result.chunk_id,
+        "content_object_id": result.content_object_id,
+        "similarity_score": result.score,
+        "page_start": result.page_start,
+        "page_end": result.page_end,
+        "snippet": result.snippet,
+        "availability": result.availability,
+        "paths": [
+            {
+                "catalog_entry_id": path.catalog_entry_id,
+                "source_location_id": path.source_location_id,
+                "display_path": path.display_path,
+                "state": path.state,
+                "is_primary": path.is_primary,
+            }
+            for path in result.paths
+        ],
     }
 
 
