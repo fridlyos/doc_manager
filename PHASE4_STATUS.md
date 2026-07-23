@@ -13,7 +13,7 @@ Scope = TECHSTACK §14 "Phase 4: Chunking, Embeddings, and Vector Search".
 | --- | --- | --- |
 | 4.a | Deterministic page-aware chunking | **✅ complete** |
 | 4.b | FastEmbed adapter + embedding-profile validation | **✅ complete** |
-| 4.c | Qdrant collection lifecycle + idempotent point operations | ⬜ not started |
+| 4.c | Qdrant collection lifecycle + idempotent point operations | **✅ complete** |
 | 4.d | `/search` with filters, thresholds, snippets, pages, current paths | ⬜ not started |
 | 4.e | Search UI + vector/catalog consistency check | ⬜ not started |
 | — | **Integration: extend `index_file` with chunk → embed → upsert** | ⬜ not started |
@@ -77,6 +77,25 @@ normalized vectors, relevant passage outranks distractor (0.73 vs 0.45).
 
 Resolves open decision #3 (collection-per-profile naming). Makes the embedding
 profile hash available for the 4.c point identity (open decision #2).
+
+### 4.c — Qdrant repository: collection lifecycle + idempotent points ✅ (2026-07-22)
+
+Delivered `doc_manager/vectors/` (dep `qdrant-client>=1.12,<1.14` → 1.13.3):
+`point.py` (`point_id` folding content object + chunking + embedding profile +
+index; `build_point` with retrieval-only payload — no paths/tags/source),
+`repository.py` (`QdrantRepository` over `AsyncQdrantClient`: `ensure_collection`
+create-or-validate/refuse via `profile.is_compatible_with`, idempotent
+`upsert_points`, `search` with score threshold + content-object allow-set,
+`delete_for_content`, `point_ids_for_content` for consistency checks;
+`build_qdrant_repository` names the collection per profile), `errors.py`. 11 unit
+tests via in-memory client; full backend suite **144 pass**; ruff/mypy clean.
+Also smoke-verified against the real Qdrant dev server (idempotent upsert,
+mismatch refusal, delete). Pinned the client to the server's version band to drop
+the 1.18-vs-1.12.4 incompatibility warning. **Full report:
+`docs/architecture/phase-4c-qdrant.md`.**
+
+Resolves open decisions #2 (point identity) and #4 (filter placement: SQL →
+content-object allow-set; Qdrant filters only on `content_object_id`).
 
 ---
 
