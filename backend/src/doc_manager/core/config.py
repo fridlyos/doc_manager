@@ -128,6 +128,11 @@ class Settings(BaseSettings):
     search_top_k: int = 12
     search_score_threshold: float | None = None
     store_query_history: bool = False
+    # RAG evidence selection (Phase 5.e): cap chunks per content object and the
+    # total evidence blocks; the token budget is derived from the provider's
+    # context window minus the output reservation at request time.
+    ask_max_chunks_per_content: int = 3
+    ask_max_evidence_blocks: int = 12
 
     @field_validator("database_url")
     @classmethod

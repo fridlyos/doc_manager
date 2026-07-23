@@ -17,7 +17,7 @@ changes** — this layer consumes the existing `RetrievalService`.
 | 5.b | Ollama adapter (default local provider) | **✅ complete** |
 | 5.c | Deployment/source external-processing policy, `deny` default, no auto-fallback | **✅ complete** |
 | 5.d | OpenAI Responses adapter (official SDK, `store=false`, stateless streaming, Docker-secret auth) | **✅ complete** |
-| 5.e | Provider-neutral evidence selection, grounded prompts, server-owned citation mapping | ⬜ not started |
+| 5.e | Provider-neutral evidence selection, grounded prompts, server-owned citation mapping | **✅ complete** |
 | 5.f | State handling: insufficient-evidence, provider-unavailable, auth, rate-limit, policy-denied, refusal | ⬜ not started |
 | 5.g | Ask UI: provider selection, streamed answer/evidence cards, Local/External badge, external preview/confirm | ⬜ not started |
 | 5.h | Provider contract tests + optional synthetic OpenAI live smoke | ⬜ not started |
@@ -139,6 +139,23 @@ configured (eligibility + policy still gate use). Config adds
 `openai_context_tokens`. 13 unit tests (fake client + real SDK exceptions;
 `importorskip`); full backend suite **205 pass**; ruff/mypy clean. Live smoke
 deferred to 5.h. **Full report: `docs/architecture/phase-5d-openai.md`.**
+
+### 5.e — Evidence selection, grounded prompts, server-owned citations ✅ (2026-07-23)
+
+Delivered `generation/rag.py` (pure, no I/O): `select_evidence` (per-content cap,
+token budget with oversized-skip + first-block truncation, opaque `E1..` aliases),
+`build_grounded_prompt` (system grounding rules + numbered evidence + question;
+untrusted-evidence framing; `INSUFFICIENT_EVIDENCE` sentinel), and `map_citations`
+(rewrite `[E#]`→`[#]` by first appearance; server-built `Citation`s from chunk/
+page/snippet/PostgreSQL paths; **drop invented aliases** with
+`unknown_provider_citation_removed`; repeated alias → one citation). Added full
+chunk `text` to `retrieval.SearchResult`; `EvidenceSet.evidence_source_policies`
+(default-deny unknown sources). Config: `ask_max_chunks_per_content`,
+`ask_max_evidence_blocks`. 13 unit tests; full backend suite **218 pass**;
+ruff/mypy clean. **Full report: `docs/architecture/phase-5e-rag.md`.**
+
+Progresses exit criterion 1 (answers use retrieved evidence, expose paths/pages/
+snippets) and 2 (a model cannot invent a clickable citation path).
 
 ---
 
