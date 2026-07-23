@@ -18,7 +18,7 @@ changes** — this layer consumes the existing `RetrievalService`.
 | 5.c | Deployment/source external-processing policy, `deny` default, no auto-fallback | **✅ complete** |
 | 5.d | OpenAI Responses adapter (official SDK, `store=false`, stateless streaming, Docker-secret auth) | **✅ complete** |
 | 5.e | Provider-neutral evidence selection, grounded prompts, server-owned citation mapping | **✅ complete** |
-| 5.f | State handling: insufficient-evidence, provider-unavailable, auth, rate-limit, policy-denied, refusal | ⬜ not started |
+| 5.f | State handling: insufficient-evidence, provider-unavailable, auth, rate-limit, policy-denied, refusal | **✅ complete** |
 | 5.g | Ask UI: provider selection, streamed answer/evidence cards, Local/External badge, external preview/confirm | ⬜ not started |
 | 5.h | Provider contract tests + optional synthetic OpenAI live smoke | ⬜ not started |
 
@@ -156,6 +156,25 @@ ruff/mypy clean. **Full report: `docs/architecture/phase-5e-rag.md`.**
 
 Progresses exit criterion 1 (answers use retrieved evidence, expose paths/pages/
 snippets) and 2 (a model cannot invent a clickable citation path).
+
+### 5.f — Ask endpoints, SSE, state handling, provider discovery ✅ (2026-07-23)
+
+Delivered `generation/ask.py` (`AskService.ask` + `ask_stream`): retrieve →
+`select_evidence` → insufficient short-circuit → external policy (denied/
+confirmation/allowed on the actual evidence sources) → `build_grounded_prompt` →
+`provider.generate` under `stream_with_timeout` → `map_citations` → §8.2
+`AskResult` + data-boundary report. `api/sse.py` (hand-rolled framing); routes
+`POST /ask`, `POST /ask/stream` (pre-stream Problems vs in-stream `ask.error`;
+ordered events, incrementing ids, single terminal), `GET /system/providers`,
+`POST /system/providers/{id}/test`; `serialize_ask_result`/`serialize_citation`;
+`get_provider_registry`/`get_ask_service` deps; `problem_body` extracted for SSE
+errors. 16 unit tests (8 service + 8 endpoint); full backend suite **234 pass**;
+ruff/mypy clean. Live Ask through real Ollama was verified at the adapter level in
+5.b (endpoint unreachable this session). **Full report:
+`docs/architecture/phase-5f-ask.md`.**
+
+Progresses exit criteria 1, 2, 5 (explicit provider errors, no fallback) and, with
+5.c, 4 (external sends only allowed text).
 
 ---
 
