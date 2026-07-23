@@ -13,14 +13,17 @@ Scope = TECHSTACK §14 "Phase 3: Scanner, Extraction, and Reconciliation".
 | 3.c | Versioned normalization and compressed artifact storage | **✅ complete** |
 | 3.d | Handle add/change/move/missing/restore states | ✅ delivered with 3.a reconciler |
 | — | **Integration: `index_file` job + `content_objects`/`file_versions`** | **✅ complete** |
-| 3.e | Document detail, errors, and manual retry/re-index API/UI | ⬜ not started |
+| 3.e | Document detail, errors, and manual retry/re-index API/UI | **✅ complete** |
+
+**Phase 3 is complete.** All deliverables and exit criteria are met.
 
 ## Exit criteria (whole phase)
 
 - Synthetic filesystem lifecycle tests pass — ✅ scan/reconcile (3.a).
 - Page numbers survive PDF extraction — ✅ (3.b; PdfExtractor preserves 1-based pages, tested).
-- Errors are isolated per document and visible to the user — ⚠️ per-document error *codes*
-  exist (3.b); surfacing them in the error queue/UI is 3.e.
+- Errors are isolated per document and visible to the user — ✅ per-document error codes
+  (3.b) are surfaced through `GET /documents`, the `GET /errors` queue, and the Documents/Errors
+  UI (3.e), each retryable via `POST /documents/{id}/reindex`.
 
 ## 3.b — completed 2026-07-21
 
@@ -96,6 +99,43 @@ clean; conftest truncation updated for the new tables.
 
 **Deferred to Phase 4:** chunking + embeddings + Qdrant upsert extend `index_file` after the
 artifact step; the terminal `indexed` state stays the same.
+
+## 3.e — completed 2026-07-22
+
+Document detail + error queue + manual re-index, API and UI. Catalog entries are
+projected as public "documents"; per-document extraction outcome (status, error
+code/message, content stats) is surfaced so failures are isolated and retryable.
+
+**Delivered (backend):**
+- `api/serializers.py::serialize_document` — projects a `catalog_entries` row joined to
+  its current `file_versions` + `content_objects`. Emits a single `display_path`
+  (`display_root` + stored posix `relative_path`, backslash for Windows-style locations) —
+  the only path field per the contract; never leaks `scan_root`.
+- `api/v1/routes/documents.py`:
+  - `GET /documents` — keyset cursor pagination, `filter[state|extension|source_location_id]`,
+    sort by `updated_at`/`created_at`/`file_name`; outer-joins version/content (never-indexed
+    entries list fine).
+  - `GET /documents/{id}` — detail with extraction status, error, and content-object stats.
+  - `POST /documents/{id}/reindex` — Idempotency-Key + 202; enqueues an `index_file` job under
+    the scanner's `index:{entry_id}` dedupe key so a manual reindex coalesces onto in-flight
+    indexing rather than racing it; replays return the original job. A never-observed entry
+    (no `sha256`) is `409` — scan the location first.
+  - `GET /errors` — the error queue: documents whose latest attempt is `failed`, newest first.
+- Router mounts `documents_router` and `errors_router`.
+
+**Delivered (frontend):**
+- `api/client.ts` — `DocumentSummary` type + `fetchDocuments(state?)`, `fetchErrors()`,
+  `reindexDocument(id)` (mints an Idempotency-Key).
+- `pages/DocumentsPage.tsx` — filter chips by state, expandable per-row detail (path, sha256,
+  extraction status, error, page/char/extractor stats), per-row Reindex; 5 s poll.
+- `pages/ErrorsPage.tsx` — failed-document queue with per-row Retry.
+- Nav + routes for `/documents` and `/errors`; supporting CSS.
+
+**Tests:** 6 PG-backed API tests (list projection across all states, state/extension filters,
+detail, error-queue isolation, reindex job-creation + idempotent replay, missing-key 400);
+3 new frontend tests (list + expand error detail, reindex POST shape, error queue + retry).
+Full backend suite **109 pass**; ruff/mypy clean. Frontend **13 pass**; tsc/eslint clean;
+production build succeeds.
 
 ## 3.a — completed 2026-07-21
 

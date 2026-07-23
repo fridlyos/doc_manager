@@ -97,6 +97,41 @@ export interface Job {
   error: { code: string; message: string; retryable: boolean } | null;
 }
 
+export type DocumentState =
+  | "discovered"
+  | "queued"
+  | "indexed"
+  | "failed"
+  | "missing"
+  | "unsupported";
+
+export interface DocumentContentObject {
+  id: string;
+  page_count: number;
+  character_count: number;
+  extractor_name: string;
+  extractor_version: string;
+  normalization_version: string;
+}
+
+export interface DocumentSummary {
+  id: string;
+  source_location_id: string;
+  display_path: string;
+  file_name: string;
+  extension: string;
+  mime_type: string | null;
+  state: DocumentState;
+  size_bytes: number | null;
+  modified_at: string | null;
+  sha256: string | null;
+  extraction_status: string | null;
+  error: { code: string; message: string } | null;
+  content_object: DocumentContentObject | null;
+  indexed_at: string | null;
+  updated_at: string;
+}
+
 async function apiFetch<T>(path: string, init?: RequestInit): Promise<T> {
   const resp = await fetch(`${API_BASE_URL}${path}`, init);
   if (!resp.ok) {
@@ -176,4 +211,23 @@ export async function requestLocationScan(locationId: string): Promise<Job> {
 
 export async function fetchJobs(): Promise<Collection<Job>> {
   return apiFetch("/api/v1/jobs");
+}
+
+export async function fetchDocuments(state?: DocumentState): Promise<Collection<DocumentSummary>> {
+  const params = new URLSearchParams();
+  if (state) params.set("filter[state]", state);
+  const query = params.toString();
+  return apiFetch(`/api/v1/documents${query ? `?${query}` : ""}`);
+}
+
+export async function fetchErrors(): Promise<Collection<DocumentSummary>> {
+  return apiFetch("/api/v1/errors");
+}
+
+export async function reindexDocument(documentId: string): Promise<Job> {
+  const result = await apiFetch<Resource<Job>>(`/api/v1/documents/${documentId}/reindex`, {
+    method: "POST",
+    headers: { "Idempotency-Key": crypto.randomUUID().replaceAll("-", "") },
+  });
+  return result.data;
 }

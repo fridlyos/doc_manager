@@ -5,12 +5,87 @@ from __future__ import annotations
 from typing import Any
 
 from doc_manager.api.envelope import iso_utc
-from doc_manager.db.models import IngestionJob, SourceLocation
-from doc_manager.domain.enums import ErrorClass
+from doc_manager.db.models import (
+    CatalogEntry,
+    ContentObject,
+    FileVersion,
+    IngestionJob,
+    SourceLocation,
+)
+from doc_manager.domain.enums import ErrorClass, PathStyle
+
+_WINDOWS_STYLES = frozenset(
+    {PathStyle.windows.value, PathStyle.mapped_drive.value, PathStyle.unc.value}
+)
 
 
 def location_etag(location: SourceLocation) -> str:
     return f'"location-{location.id}-{location.revision}"'
+
+
+def _display_path(location: SourceLocation, relative_path: str) -> str:
+    """Join the location's display root with a stored (posix) relative path.
+
+    The only path field an endpoint may return (contract sec. 5). Windows-style
+    locations render backslash separators; posix locations keep forward slashes.
+    """
+    if location.path_style in _WINDOWS_STYLES:
+        rel = relative_path.replace("/", "\\")
+        root = location.display_root.rstrip("\\/")
+        return f"{root}\\{rel}" if rel else root
+    root = location.display_root.rstrip("/")
+    return f"{root}/{relative_path}" if relative_path else root
+
+
+def serialize_document(
+    entry: CatalogEntry,
+    location: SourceLocation,
+    version: FileVersion | None,
+    content: ContentObject | None,
+) -> dict[str, Any]:
+    """Project a catalog entry (plus its current file version) as a document.
+
+    Per-document extraction outcome — status, error code/message, and content
+    statistics — is surfaced here so the error queue and detail view can isolate
+    failures to a single document (Phase 3.e exit criterion).
+    """
+    error = None
+    extraction_status = None
+    content_object = None
+    if version is not None:
+        extraction_status = version.extraction_status
+        if version.error_code is not None:
+            error = {"code": version.error_code, "message": version.error_message or ""}
+        if content is not None:
+            content_object = {
+                "id": str(content.id),
+                "page_count": content.page_count,
+                "character_count": content.character_count,
+                "extractor_name": content.extractor_name,
+                "extractor_version": content.extractor_version,
+                "normalization_version": content.normalization_version,
+            }
+    return {
+        "id": str(entry.id),
+        "source_location_id": str(entry.source_location_id),
+        "display_path": _display_path(location, entry.relative_path),
+        "file_name": entry.file_name,
+        "extension": entry.extension,
+        "mime_type": entry.mime_type,
+        "state": entry.state,
+        "size_bytes": entry.last_observed_size_bytes,
+        "modified_at": iso_utc(entry.last_observed_mtime),
+        "sha256": entry.sha256,
+        "extraction_status": extraction_status,
+        "error": error,
+        "content_object": content_object,
+        "first_seen_at": iso_utc(entry.first_seen_at),
+        "last_seen_at": iso_utc(entry.last_seen_at),
+        "missing_since": iso_utc(entry.missing_since),
+        "indexed_at": iso_utc(version.indexed_at) if version is not None else None,
+        "created_at": iso_utc(entry.created_at),
+        "updated_at": iso_utc(entry.updated_at),
+    }
 
 
 def serialize_location(location: SourceLocation) -> dict[str, Any]:
