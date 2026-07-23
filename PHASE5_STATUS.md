@@ -15,7 +15,7 @@ changes** — this layer consumes the existing `RetrievalService`.
 | --- | --- | --- |
 | 5.a | Provider interface + registry, health, streaming events, cancellation, usage, bounded timeouts | **✅ complete** |
 | 5.b | Ollama adapter (default local provider) | **✅ complete** |
-| 5.c | Deployment/source external-processing policy, `deny` default, no auto-fallback | ⬜ not started |
+| 5.c | Deployment/source external-processing policy, `deny` default, no auto-fallback | **✅ complete** |
 | 5.d | OpenAI Responses adapter (official SDK, `store=false`, stateless streaming, Docker-secret auth) | ⬜ not started |
 | 5.e | Provider-neutral evidence selection, grounded prompts, server-owned citation mapping | ⬜ not started |
 | 5.f | State handling: insufficient-evidence, provider-unavailable, auth, rate-limit, policy-denied, refusal | ⬜ not started |
@@ -107,6 +107,22 @@ takes an injectable `httpx` transport so tests use `httpx.MockTransport` (no
 `docs/architecture/phase-5b-ollama.md`.**
 
 Progresses exit criterion 3 (local mode contacts no cloud service).
+
+### 5.c — External-processing policy + data-boundary accounting ✅ (2026-07-23)
+
+Delivered `generation/policy.py` (`evaluate_external_policy` → `PolicyOutcome`:
+local bypass; external-disabled denied; **any** denied evidence source → denied
+with count; all-allow-without-ack → confirmation_required; all-allow-with-ack →
+allowed — deny default, fail closed, no fallback) and `generation/boundary.py`
+(`DataBoundaryReport`/`ExternalPayload` per §8.2 with **structurally-zero**
+metadata counters — paths/file_names/tags/catalog_ids/original_files; builders
+`local_boundary`, `external_boundary`, `confirmation_summary`). Added
+`external_policy_denied` (403) to the error taxonomy. 10 unit tests; full backend
+suite **192 pass**; ruff/mypy clean. **Full report:
+`docs/architecture/phase-5c-external-policy.md`.**
+
+Progresses exit criterion 4 (external mode sends only allowed text — enforced by
+the policy gate + zero-metadata boundary counters) and 5 (no fallback).
 
 ---
 

@@ -19,6 +19,9 @@ class GenerationErrorCode(StrEnum):
     provider_authentication_failed = "provider_authentication_failed"
     provider_rate_limited = "provider_rate_limited"
     provider_error = "provider_error"
+    #: A request would transfer evidence to an external provider that a deployment
+    #: or an evidence-bearing source location forbids. Fails closed (§12).
+    external_policy_denied = "external_policy_denied"
 
 
 #: Stable code → HTTP status (contract §4). Retryability is per-instance.
@@ -29,6 +32,7 @@ _HTTP_STATUS = {
     GenerationErrorCode.provider_authentication_failed: 401,
     GenerationErrorCode.provider_rate_limited: 429,
     GenerationErrorCode.provider_error: 502,
+    GenerationErrorCode.external_policy_denied: 403,
 }
 
 #: Codes whose default posture is retryable (a later attempt may succeed).

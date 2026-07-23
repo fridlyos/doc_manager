@@ -13,6 +13,13 @@ from doc_manager.generation.base import (
     ProviderCapabilities,
     ProviderReadiness,
 )
+from doc_manager.generation.boundary import (
+    DataBoundaryReport,
+    ExternalPayload,
+    confirmation_summary,
+    external_boundary,
+    local_boundary,
+)
 from doc_manager.generation.errors import GenerationError, GenerationErrorCode
 from doc_manager.generation.events import (
     FinishReason,
@@ -25,11 +32,19 @@ from doc_manager.generation.events import (
     Usage,
 )
 from doc_manager.generation.ollama import OllamaProvider, build_ollama_provider
+from doc_manager.generation.policy import (
+    ExternalDecision,
+    PolicyOutcome,
+    evaluate_external_policy,
+)
 from doc_manager.generation.registry import ProviderRegistry, build_registry
 from doc_manager.generation.timeout import stream_with_timeout
 
 __all__ = [
     "DataBoundary",
+    "DataBoundaryReport",
+    "ExternalDecision",
+    "ExternalPayload",
     "FinishReason",
     "GenDelta",
     "GenFinished",
@@ -42,11 +57,16 @@ __all__ = [
     "GenerationProvider",
     "GenerationRequest",
     "OllamaProvider",
+    "PolicyOutcome",
     "ProviderCapabilities",
     "ProviderReadiness",
     "ProviderRegistry",
     "Usage",
     "build_ollama_provider",
     "build_registry",
+    "confirmation_summary",
+    "evaluate_external_policy",
+    "external_boundary",
+    "local_boundary",
     "stream_with_timeout",
 ]
