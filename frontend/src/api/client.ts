@@ -277,3 +277,121 @@ export async function search(body: SearchRequest): Promise<SearchResponse> {
   });
   return result.data;
 }
+
+// --- Ask (RAG generation) ---------------------------------------------------
+
+export type DataBoundary = "local" | "external";
+
+export interface ProviderInfo {
+  provider_id: string;
+  data_boundary: DataBoundary;
+  eligible: boolean;
+}
+
+export interface AskCitation {
+  citation_id: string;
+  ordinal: number;
+  chunk_id: string;
+  page_start: number | null;
+  page_end: number | null;
+  snippet: string;
+  similarity_score: number;
+  availability: "current" | "missing" | "historical";
+  paths: SearchPath[];
+}
+
+export interface AskResultData {
+  id: string;
+  status: "completed" | "insufficient_evidence" | "refused" | "external_confirmation_required";
+  answer: string | null;
+  answer_format: string;
+  provider: { provider_id: string; model_id: string | null; data_boundary: DataBoundary; invoked: boolean };
+  data_boundary: {
+    classification: DataBoundary;
+    external_transfer_occurred: boolean;
+    external_payload: Record<string, number | boolean>;
+  };
+  retrieval: { candidate_count: number; selected_evidence_count: number; sufficient: boolean };
+  citations: AskCitation[];
+  finish_reason: string | null;
+  usage: { input_tokens: number | null; output_tokens: number | null; total_tokens: number | null } | null;
+  timing: { retrieval_ms: number; generation_ms: number | null; total_ms: number };
+  warnings: string[];
+  confirmation?: {
+    provider_id: string;
+    evidence_blocks: number;
+    evidence_characters: number;
+    [key: string]: number | string;
+  };
+}
+
+export interface AskRequestBody {
+  question: string;
+  provider_id: string;
+  external_processing_acknowledged?: boolean;
+  model_id?: string;
+  filters?: { source_location_ids?: string[]; extensions?: string[] };
+  retrieval?: { top_k?: number; score_threshold?: number };
+}
+
+export interface AskStreamEvent {
+  event: string;
+  data: Record<string, unknown>;
+}
+
+export async function fetchProviders(): Promise<ProviderInfo[]> {
+  const result = await apiFetch<Resource<ProviderInfo[]>>("/api/v1/system/providers");
+  return result.data;
+}
+
+function parseSseFrame(raw: string): AskStreamEvent | null {
+  if (!raw.trim() || raw.startsWith(":")) return null; // comment / keep-alive
+  let event = "message";
+  let data = "";
+  for (const line of raw.split("\n")) {
+    if (line.startsWith("event:")) event = line.slice(6).trim();
+    else if (line.startsWith("data:")) data += line.slice(5).trim();
+  }
+  if (!data) return null;
+  return { event, data: JSON.parse(data) as Record<string, unknown> };
+}
+
+// Streams the Ask SSE response, invoking `onEvent` per normalized event. Consumes
+// the response body with fetch + a ReadableStream reader (browser EventSource
+// cannot POST the required JSON body).
+export async function askStream(
+  body: AskRequestBody,
+  onEvent: (event: AskStreamEvent) => void,
+  signal?: AbortSignal,
+): Promise<void> {
+  const resp = await fetch(`${API_BASE_URL}/api/v1/ask/stream`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(body),
+    signal,
+  });
+  if (!resp.ok || !resp.body) {
+    let detail = `ask request failed: ${resp.status}`;
+    try {
+      const problem = (await resp.json()) as { detail?: string };
+      if (problem.detail) detail = problem.detail;
+    } catch {
+      // keep the status fallback
+    }
+    throw new Error(detail);
+  }
+  const reader = resp.body.getReader();
+  const decoder = new TextDecoder();
+  let buffer = "";
+  for (;;) {
+    const { done, value } = await reader.read();
+    if (done) break;
+    buffer += decoder.decode(value, { stream: true });
+    let idx: number;
+    while ((idx = buffer.indexOf("\n\n")) >= 0) {
+      const frame = parseSseFrame(buffer.slice(0, idx));
+      buffer = buffer.slice(idx + 2);
+      if (frame) onEvent(frame);
+    }
+  }
+}

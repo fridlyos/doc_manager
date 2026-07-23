@@ -19,7 +19,7 @@ changes** — this layer consumes the existing `RetrievalService`.
 | 5.d | OpenAI Responses adapter (official SDK, `store=false`, stateless streaming, Docker-secret auth) | **✅ complete** |
 | 5.e | Provider-neutral evidence selection, grounded prompts, server-owned citation mapping | **✅ complete** |
 | 5.f | State handling: insufficient-evidence, provider-unavailable, auth, rate-limit, policy-denied, refusal | **✅ complete** |
-| 5.g | Ask UI: provider selection, streamed answer/evidence cards, Local/External badge, external preview/confirm | ⬜ not started |
+| 5.g | Ask UI: provider selection, streamed answer/evidence cards, Local/External badge, external preview/confirm | **✅ complete** |
 | 5.h | Provider contract tests + optional synthetic OpenAI live smoke | ⬜ not started |
 
 ## Exit criteria (whole phase)
@@ -175,6 +175,19 @@ ruff/mypy clean. Live Ask through real Ollama was verified at the adapter level 
 
 Progresses exit criteria 1, 2, 5 (explicit provider errors, no fallback) and, with
 5.c, 4 (external sends only allowed text).
+
+### 5.g — Ask UI ✅ (2026-07-23)
+
+Delivered frontend `AskPage` (`/ask`, nav): `client.ts` `fetchProviders()` +
+`askStream()` (SSE via `fetch` + `ReadableStream` reader). Provider select with a
+persistent Local/External data-boundary badge; streamed `answer.delta` then
+reconcile with terminal `ask.result`; evidence/citation cards (ordinal,
+display_path, page, availability, snippet); external-confirmation preview
+(counts-only) + acknowledged resend; insufficient/refused/error/warning states.
+4 Vitest tests; full frontend suite **19 pass**; eslint/tsc clean; build succeeds.
+**Full report: `docs/architecture/phase-5g-ask-ui.md`.**
+
+Only 5.h (provider contract fixtures + optional OpenAI live smoke) remains in Phase 5.
 
 ---
 

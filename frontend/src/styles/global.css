@@ -376,3 +376,70 @@ code {
   color: #d29922;
   border: 1px solid #d29922;
 }
+
+.boundary-local {
+  color: var(--up);
+  border: 1px solid var(--up);
+}
+.boundary-external {
+  color: #d29922;
+  border: 1px solid #d29922;
+}
+
+.ask-question {
+  flex: 1;
+}
+.ask-question input {
+  width: 100%;
+}
+
+.confirm-box {
+  padding: 0.75rem 1rem;
+  margin: 1rem 0;
+  background: var(--panel);
+  border: 1px solid #d29922;
+  border-radius: 0.5rem;
+}
+
+.answer {
+  margin-top: 1rem;
+  padding: 1rem;
+  background: var(--panel);
+  border-radius: 0.5rem;
+}
+
+.answer-body {
+  white-space: pre-wrap;
+  line-height: 1.5;
+}
+
+.citations {
+  list-style: none;
+  padding: 0;
+  margin: 1rem 0 0;
+  display: grid;
+  gap: 0.5rem;
+}
+
+.citation {
+  padding: 0.5rem 0.75rem;
+  background: var(--bg);
+  border-radius: 0.4rem;
+}
+
+.citation-head {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  flex-wrap: wrap;
+}
+
+.citation-ordinal {
+  color: var(--muted);
+  font-variant-numeric: tabular-nums;
+}
+
+.citation-snippet {
+  margin: 0.4rem 0 0;
+  color: var(--muted);
+}
