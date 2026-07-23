@@ -2,6 +2,7 @@
 
 from doc_manager.db.models.base import Base
 from doc_manager.db.models.catalog import CatalogEntry, ScanObservation
+from doc_manager.db.models.content import ContentObject, FileVersion
 from doc_manager.db.models.jobs import (
     IdempotencyRecord,
     IngestionJob,
@@ -15,6 +16,8 @@ from doc_manager.db.models.locations import SourceLocation
 __all__ = [
     "Base",
     "CatalogEntry",
+    "ContentObject",
+    "FileVersion",
     "IdempotencyRecord",
     "IngestionJob",
     "IngestionJobAttempt",

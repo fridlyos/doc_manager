@@ -253,3 +253,71 @@ code {
   display: flex;
   justify-content: flex-end;
 }
+
+.filter-bar {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.4rem;
+  margin-bottom: 1rem;
+}
+
+.chip {
+  padding: 0.25rem 0.7rem;
+  font-size: 0.85rem;
+  border-radius: 999px;
+  background: transparent;
+  border: 1px solid #343a46;
+  color: var(--muted);
+}
+
+.chip-active {
+  color: var(--text);
+  background: #293249;
+  border-color: #46577f;
+}
+
+.linklike {
+  padding: 0;
+  background: none;
+  border: none;
+  color: #7aa2f7;
+  cursor: pointer;
+  text-decoration: underline;
+}
+
+.status {
+  font-size: 0.8rem;
+  text-transform: capitalize;
+}
+.status-indexed {
+  color: var(--up);
+}
+.status-failed,
+.status-missing {
+  color: var(--down);
+}
+.status-unsupported,
+.status-discovered,
+.status-queued {
+  color: var(--disabled);
+}
+
+.detail-row td {
+  background: var(--panel);
+}
+
+.doc-detail {
+  display: grid;
+  grid-template-columns: max-content 1fr;
+  gap: 0.35rem 1rem;
+  margin: 0;
+}
+
+.doc-detail dt {
+  color: var(--muted);
+}
+
+.doc-detail dd {
+  margin: 0;
+  overflow-wrap: anywhere;
+}

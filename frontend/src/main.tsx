@@ -6,6 +6,8 @@ import { App } from "./app/App";
 import { SystemStatusPage } from "./pages/SystemStatusPage";
 import { JobsPage } from "./pages/JobsPage";
 import { LocationsPage } from "./pages/LocationsPage";
+import { DocumentsPage } from "./pages/DocumentsPage";
+import { ErrorsPage } from "./pages/ErrorsPage";
 import "./styles/global.css";
 
 const queryClient = new QueryClient();
@@ -17,6 +19,8 @@ const router = createBrowserRouter([
     children: [
       { index: true, element: <SystemStatusPage /> },
       { path: "locations", element: <LocationsPage /> },
+      { path: "documents", element: <DocumentsPage /> },
+      { path: "errors", element: <ErrorsPage /> },
       { path: "jobs", element: <JobsPage /> },
     ],
   },

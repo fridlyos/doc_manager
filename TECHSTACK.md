@@ -1310,12 +1310,12 @@ A phase is complete only when its migrations, unit tests, integration tests, lin
 
 Deliverables:
 
-- Approve this plan and unresolved deployment constraints.
-- Add initial ADRs for physical-file/canonical-content separation, PostgreSQL job queue, extracted-text storage, and generation-provider/privacy boundaries.
-- Record the selected platform: Windows, current WSL 2, Docker Desktop Linux containers, Docker-managed live database volumes, and SMB mapped NAS paths for documents/artifacts/backups.
-- Record the NAS platform, stable UNC paths, Windows drive mapping, least-privilege account, external-backup destination, and initial RPO/RTO.
-- Define API error envelope, pagination format, IDs, timestamps, and job state machine.
-- Define sample synthetic documents and expected citations.
+a. Approve this plan and unresolved deployment constraints.
+b. Add initial ADRs for physical-file/canonical-content separation, PostgreSQL job queue, extracted-text storage, and generation-provider/privacy boundaries.
+c. Record the selected platform: Windows, current WSL 2, Docker Desktop Linux containers, Docker-managed live database volumes, and SMB mapped NAS paths for documents/artifacts/backups.
+d. Record the NAS platform, stable UNC paths, Windows drive mapping, least-privilege account, external-backup destination, and initial RPO/RTO.
+e. Define API error envelope, pagination format, IDs, timestamps, and job state machine.
+f. Define sample synthetic documents and expected citations.
 
 Phase 0 artifacts:
 
@@ -1334,18 +1334,18 @@ Exit criteria:
 
 Deliverables:
 
-- Create backend/frontend structure and lockfiles.
-- Add Compose services for PostgreSQL, Qdrant, API, worker, UI development, and the backup maintenance profile.
-- Document native Windows Ollama setup and the `host.docker.internal:11434` connectivity check.
-- Add the on-demand backup maintenance profile, `.env.example`, health checks, local volumes, source-mount examples, and safe defaults.
-- Add an external-provider Compose override and Docker-secret wiring without committing a key or enabling external inference by default.
-- Document and validate the supported Docker Desktop/WSL versions and Linux-container mode.
-- Add Windows mapped-drive bind mounts with `create_host_path: false`, read-only document access, stable UNC display mapping, and least-privilege backup access.
-- Enable PostgreSQL page checksums during first cluster initialization.
-- Add storage preflight checks and document that Qdrant filesystem failures cannot be overridden for production.
-- Fail the relevant scan/backup preflight when the expected NAS mount identity or sentinel is absent; never reconcile documents against an accidentally empty local path.
-- Implement FastAPI liveness/readiness and structured logging.
-- Configure lint, format, type-check, and test commands.
+a. Create backend/frontend structure and lockfiles.
+b. Add Compose services for PostgreSQL, Qdrant, API, worker, UI development, and the backup maintenance profile.
+c. Document native Windows Ollama setup and the `host.docker.internal:11434` connectivity check.
+d. Add the on-demand backup maintenance profile, `.env.example`, health checks, local volumes, source-mount examples, and safe defaults.
+e. Add an external-provider Compose override and Docker-secret wiring without committing a key or enabling external inference by default.
+f. Document and validate the supported Docker Desktop/WSL versions and Linux-container mode.
+g. Add Windows mapped-drive bind mounts with `create_host_path: false`, read-only document access, stable UNC display mapping, and least-privilege backup access.
+h. Enable PostgreSQL page checksums during first cluster initialization.
+i. Add storage preflight checks and document that Qdrant filesystem failures cannot be overridden for production.
+j. Fail the relevant scan/backup preflight when the expected NAS mount identity or sentinel is absent; never reconcile documents against an accidentally empty local path.
+k. Implement FastAPI liveness/readiness and structured logging.
+l. Configure lint, format, type-check, and test commands.
 
 Exit criteria:
 
@@ -1359,11 +1359,11 @@ Exit criteria:
 
 Deliverables:
 
-- Implement initial Alembic schema and repositories.
-- Implement location CRUD/test API and scan/display path mapping.
-- Implement PostgreSQL job claim, lease, heartbeat, retry, cancel, and events.
-- Implement worker and periodic scheduler.
-- Add catalog/location/job UI foundations.
+a. Implement initial Alembic schema and repositories.
+b. Implement location CRUD/test API and scan/display path mapping.
+c. Implement PostgreSQL job claim, lease, heartbeat, retry, cancel, and events.
+d. Implement worker and periodic scheduler.
+e. Add catalog/location/job UI foundations.
 
 Exit criteria:
 
@@ -1375,11 +1375,11 @@ Exit criteria:
 
 Deliverables:
 
-- Implement safe traversal, filtering, hashing, and reconciliation.
-- Implement PDF, TXT, MD, CSV, and log extractors.
-- Implement versioned normalization and compressed artifact storage.
-- Handle add/change/move/missing/restore states.
-- Add document detail, errors, and manual retry/re-index API/UI.
+a. Implement safe traversal, filtering, hashing, and reconciliation.
+b. Implement PDF, TXT, MD, CSV, and log extractors.
+c. Implement versioned normalization and compressed artifact storage.
+d. Handle add/change/move/missing/restore states.
+e. Add document detail, errors, and manual retry/re-index API/UI.
 
 Exit criteria:
 
@@ -1391,11 +1391,11 @@ Exit criteria:
 
 Deliverables:
 
-- Implement deterministic page-aware chunking.
-- Implement FastEmbed adapter and embedding-profile validation.
-- Implement Qdrant collection lifecycle and idempotent point operations.
-- Implement `/search` with filters, thresholds, snippets, pages, and current paths.
-- Add search UI and vector/catalog consistency check.
+a. Implement deterministic page-aware chunking.
+b. Implement FastEmbed adapter and embedding-profile validation.
+c. Implement Qdrant collection lifecycle and idempotent point operations.
+d. Implement `/search` with filters, thresholds, snippets, pages, and current paths.
+e. Add search UI and vector/catalog consistency check.
 
 Exit criteria:
 
@@ -1407,14 +1407,14 @@ Exit criteria:
 
 Deliverables:
 
-- Implement the normalized generation-provider interface, registry, health checks, streaming events, cancellation, usage metadata, and bounded timeouts.
-- Implement the Ollama adapter as the default local provider.
-- Implement deployment/source-level external-processing policy with `deny` as the default and no automatic fallback.
-- Implement the OpenAI Responses API adapter using the official SDK, `store=false`, stateless streaming, no hosted tools/files, and Docker-secret authentication.
-- Implement provider-neutral evidence selection, grounded prompts, and server-owned citation mapping.
-- Implement insufficient-evidence, provider-unavailable, authentication, rate-limit, external-policy-denied, and refusal states.
-- Add Ask UI with provider selection, streamed answer/evidence cards, a persistent Local/External badge, and an external-data preview/confirmation.
-- Add provider contract tests and a synthetic optional OpenAI live smoke test.
+a. Implement the normalized generation-provider interface, registry, health checks, streaming events, cancellation, usage metadata, and bounded timeouts.
+b. Implement the Ollama adapter as the default local provider.
+c. Implement deployment/source-level external-processing policy with `deny` as the default and no automatic fallback.
+d. Implement the OpenAI Responses API adapter using the official SDK, `store=false`, stateless streaming, no hosted tools/files, and Docker-secret authentication.
+e. Implement provider-neutral evidence selection, grounded prompts, and server-owned citation mapping.
+f. Implement insufficient-evidence, provider-unavailable, authentication, rate-limit, external-policy-denied, and refusal states.
+g. Add Ask UI with provider selection, streamed answer/evidence cards, a persistent Local/External badge, and an external-data preview/confirmation.
+h. Add provider contract tests and a synthetic optional OpenAI live smoke test.
 
 Exit criteria:
 
@@ -1429,11 +1429,11 @@ Exit criteria:
 
 Deliverables:
 
-- Enable per-location schedules and manual file/location/all re-indexing.
-- Implement profile-driven full re-index jobs.
-- Implement exact-file and normalized-text duplicate reports.
-- Reuse canonical content and vectors across exact or structure-equivalent paths; report text-equivalent files with different pagination without sharing citation-bearing chunks.
-- Add duplicate and coverage UI.
+a. Enable per-location schedules and manual file/location/all re-indexing.
+b. Implement profile-driven full re-index jobs.
+c. Implement exact-file and normalized-text duplicate reports.
+d. Reuse canonical content and vectors across exact or structure-equivalent paths; report text-equivalent files with different pagination without sharing citation-bearing chunks.
+e. Add duplicate and coverage UI.
 
 Exit criteria:
 
@@ -1445,10 +1445,10 @@ Exit criteria:
 
 Deliverables:
 
-- Implement pairwise location coverage reports.
-- Implement relative-path/hash/text comparison rules.
-- Persist and display dry-run sync plans and conflicts.
-- Document how a future separately reviewed executor could consume a plan.
+a. Implement pairwise location coverage reports.
+b. Implement relative-path/hash/text comparison rules.
+c. Persist and display dry-run sync plans and conflicts.
+d. Document how a future separately reviewed executor could consume a plan.
 
 Exit criteria:
 
@@ -1459,15 +1459,15 @@ Exit criteria:
 
 Deliverables:
 
-- Add resource limits, graceful shutdown, stale-lease recovery, and cleanup grace periods.
-- Run threat-model review for filesystem access and document prompt injection.
-- Implement coordinated PostgreSQL dump, Qdrant snapshot, artifact inventory, checksums, atomic completion, and retention in the backup maintenance profile.
-- Add backup/restore, optional PostgreSQL PITR, upgrade/migration, model setup, and troubleshooting guides.
-- Add provider enablement, key rotation, external-data review, rate-limit/cost-control, and incident-disable procedures.
-- Run threat-model tests for provider secret leakage, accidental egress, prompt injection, and path/metadata disclosure.
-- Connect the completed backup directory to the NAS external-backup workflow without exposing live Docker volume internals.
-- Add performance measurements on a representative local corpus.
-- Complete accessibility and browser workflow review.
+a. Add resource limits, graceful shutdown, stale-lease recovery, and cleanup grace periods.
+b. Run threat-model review for filesystem access and document prompt injection.
+c. Implement coordinated PostgreSQL dump, Qdrant snapshot, artifact inventory, checksums, atomic completion, and retention in the backup maintenance profile.
+d. Add backup/restore, optional PostgreSQL PITR, upgrade/migration, model setup, and troubleshooting guides.
+e. Add provider enablement, key rotation, external-data review, rate-limit/cost-control, and incident-disable procedures.
+f. Run threat-model tests for provider secret leakage, accidental egress, prompt injection, and path/metadata disclosure.
+g. Connect the completed backup directory to the NAS external-backup workflow without exposing live Docker volume internals.
+h. Add performance measurements on a representative local corpus.
+i. Complete accessibility and browser workflow review.
 
 Exit criteria:
 

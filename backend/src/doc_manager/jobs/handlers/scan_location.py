@@ -1,14 +1,20 @@
-"""`scan_location` handler: enumerate a source root into catalog observations.
+"""`scan_location` handler: enumerate a source root and reconcile the catalog.
 
-Phase 2 scope: relative path, size, and mtime observations only — hashing and
-extraction arrive in Phase 3. Safety rules (state-machine contract sec. 8):
+Phase 3.a scope: safe traversal, filtering, SHA-256 hashing, and content-aware
+reconciliation (add/change/move/restore/missing). Extraction and vectors arrive
+later (3.b+). Safety rules (state-machine contract sec. 8):
 
 - Observations are staged under ``(job_id, attempt_number, lease_token)``.
-- Missing-file reconciliation happens in ONE final fenced transaction, only
-  after enumeration completed, the sentinel stayed valid, cancellation was not
-  requested, and the worker still owns the unexpired lease.
-- An unreachable root or missing/mismatched sentinel is a *transient* error:
-  the location is retried and nothing is ever marked missing.
+- Reconciliation happens in ONE final fenced transaction, only after enumeration
+  completed, the sentinel stayed valid, cancellation was not requested, and the
+  worker still owns the unexpired lease.
+- An unreachable root or missing/mismatched sentinel is a *transient* error: the
+  location is retried and nothing is ever marked missing.
+
+Hashing is the change authority: a file is hashed when it is new or when its
+size/mtime differ from the catalog's last observation; an unchanged file carries
+its stored hash forward (fast path). A moved/renamed/restored file is recognized
+by its bytes rather than its path.
 """
 
 from __future__ import annotations
@@ -21,61 +27,42 @@ from datetime import UTC, datetime
 from pathlib import Path, PurePosixPath
 
 from sqlalchemy import delete, select, text
+from sqlalchemy.ext.asyncio import AsyncSession
 
 from doc_manager.core.config import get_settings
+from doc_manager.core.hashing import sha256_file
 from doc_manager.core.logging import get_logger
-from doc_manager.db.models import IngestionJob, ScanObservation, SourceLocation
+from doc_manager.db.models import CatalogEntry, IngestionJob, ScanObservation, SourceLocation
 from doc_manager.db.session import db_now
-from doc_manager.domain.enums import JobStatus
+from doc_manager.domain.enums import CatalogEntryState, JobOrigin, JobStatus, JobType
 from doc_manager.jobs.context import JobContext
 from doc_manager.jobs.errors import LeaseLostError, TransientJobError
+from doc_manager.jobs.handlers.reconcile import CatalogRow, ObservedFile, reconcile
 
 log = get_logger("doc_manager.jobs.scan_location")
 
 #: Extensions scanned when a location does not restrict them (TECHSTACK sec. 2).
 DEFAULT_INCLUDE_EXTENSIONS = frozenset({"pdf", "txt", "md", "csv", "log"})
+#: Directory names never descended into, regardless of a location's globs — VCS
+#: metadata and OS/recycle/system folders that are never source documents.
+_ALWAYS_EXCLUDE_DIRS = frozenset(
+    {
+        ".git",
+        ".svn",
+        ".hg",
+        "$recycle.bin",
+        "system volume information",
+        ".trash",
+        ".trashes",
+        "__pycache__",
+        "node_modules",
+    }
+)
 _STAGE_BATCH_SIZE = 500
 
-_RECONCILE_UPSERT = text(
-    """
-    INSERT INTO catalog_entries (
-        id, source_location_id, relative_path, file_name, extension, state,
-        last_observed_size_bytes, last_observed_mtime,
-        first_seen_at, last_seen_at, created_at, updated_at
-    )
-    SELECT gen_random_uuid(), :location_id, o.relative_path, o.file_name,
-           o.extension, 'discovered', o.size_bytes, o.mtime,
-           clock_timestamp(), clock_timestamp(), clock_timestamp(), clock_timestamp()
-    FROM scan_observations o
-    WHERE o.job_id = :job_id AND o.attempt_number = :attempt_number
-    ON CONFLICT (source_location_id, relative_path) DO UPDATE SET
-        last_seen_at = clock_timestamp(),
-        last_observed_size_bytes = EXCLUDED.last_observed_size_bytes,
-        last_observed_mtime = EXCLUDED.last_observed_mtime,
-        state = CASE
-            WHEN catalog_entries.state = 'missing' THEN 'discovered'
-            ELSE catalog_entries.state
-        END,
-        missing_since = NULL,
-        updated_at = clock_timestamp()
-    """
-)
-
-_RECONCILE_MISSING = text(
-    """
-    UPDATE catalog_entries c
-    SET state = 'missing', missing_since = clock_timestamp(),
-        updated_at = clock_timestamp()
-    WHERE c.source_location_id = :location_id
-      AND c.state != 'missing'
-      AND NOT EXISTS (
-          SELECT 1 FROM scan_observations o
-          WHERE o.job_id = :job_id
-            AND o.attempt_number = :attempt_number
-            AND o.relative_path = c.relative_path
-      )
-    """
-)
+#: (size_bytes, mtime, sha256) keyed by relative path — the prior catalog view
+#: used to decide whether a file must be re-hashed.
+_PriorSnapshot = dict[str, tuple[int | None, datetime | None, str | None]]
 
 
 @dataclass(frozen=True, slots=True)
@@ -85,6 +72,7 @@ class _Observed:
     extension: str
     size_bytes: int
     mtime: datetime
+    sha256: str
 
 
 class _SentinelCheck:
@@ -114,8 +102,13 @@ def _check_root(location: SourceLocation, sentinel_name: str) -> _SentinelCheck:
     return _SentinelCheck(observed)
 
 
-def _enumerate(location: SourceLocation) -> list[_Observed]:
-    """Blocking filesystem walk; runs in a thread. Symlinks are never followed."""
+def _enumerate(location: SourceLocation, prior: _PriorSnapshot) -> list[_Observed]:
+    """Blocking filesystem walk + hashing; runs in a thread.
+
+    Symlinks are never followed. A file whose size and mtime match the catalog
+    carries its stored hash forward; anything new or changed is hashed now. A
+    file that vanishes or cannot be read mid-scan is simply not observed.
+    """
     root = Path(location.scan_root)
     include = (
         {e.lower() for e in location.include_extensions}
@@ -126,11 +119,12 @@ def _enumerate(location: SourceLocation) -> list[_Observed]:
     observed: list[_Observed] = []
     for dirpath, dirnames, filenames in os.walk(root, followlinks=False):
         rel_dir = PurePosixPath(Path(dirpath).relative_to(root).as_posix())
-        # Prune excluded directories before descending into them.
+        # Prune system/VCS dirs and excluded dirs before descending.
         dirnames[:] = [
             d
             for d in dirnames
-            if not _excluded(str(rel_dir / d) if str(rel_dir) != "." else d, excludes)
+            if d.lower() not in _ALWAYS_EXCLUDE_DIRS
+            and not _excluded(str(rel_dir / d) if str(rel_dir) != "." else d, excludes)
         ]
         for name in filenames:
             rel_path = str(rel_dir / name) if str(rel_dir) != "." else name
@@ -145,8 +139,12 @@ def _enumerate(location: SourceLocation) -> list[_Observed]:
             try:
                 st = full.stat()
             except OSError:
-                # A file that vanished mid-walk is simply not observed; the
-                # next scan reconciles it.
+                continue
+            mtime = datetime.fromtimestamp(st.st_mtime, tz=UTC)
+            sha = _hash_or_carry(full, prior.get(rel_path), st.st_size, mtime)
+            if sha is None:
+                # Unreadable content (locked/vanished between stat and open);
+                # skip it — the next scan reconciles.
                 continue
             observed.append(
                 _Observed(
@@ -154,14 +152,47 @@ def _enumerate(location: SourceLocation) -> list[_Observed]:
                     file_name=name,
                     extension=extension,
                     size_bytes=st.st_size,
-                    mtime=datetime.fromtimestamp(st.st_mtime, tz=UTC),
+                    mtime=mtime,
+                    sha256=sha,
                 )
             )
     return observed
 
 
+def _hash_or_carry(
+    full: Path,
+    prior: tuple[int | None, datetime | None, str | None] | None,
+    size: int,
+    mtime: datetime,
+) -> str | None:
+    """Return the stored hash when size+mtime are unchanged, else re-hash."""
+    if prior is not None:
+        prior_size, prior_mtime, prior_sha = prior
+        if prior_sha is not None and prior_size == size and prior_mtime == mtime:
+            return prior_sha
+    try:
+        return sha256_file(full)
+    except OSError:
+        return None
+
+
 def _excluded(rel_path: str, excludes: list[str]) -> bool:
     return any(fnmatch.fnmatch(rel_path, pattern) for pattern in excludes)
+
+
+async def _load_prior_snapshot(
+    session: AsyncSession,
+    location_id: object,
+) -> _PriorSnapshot:
+    rows = await session.execute(
+        select(
+            CatalogEntry.relative_path,
+            CatalogEntry.last_observed_size_bytes,
+            CatalogEntry.last_observed_mtime,
+            CatalogEntry.sha256,
+        ).where(CatalogEntry.source_location_id == location_id)
+    )
+    return {path: (size, mtime, sha) for path, size, mtime, sha in rows}
 
 
 async def handle_scan_location(ctx: JobContext) -> None:
@@ -183,7 +214,8 @@ async def handle_scan_location(ctx: JobContext) -> None:
     check = _check_root(location, sentinel_name)
     ctx.check_boundary()
 
-    observed = await asyncio.to_thread(_enumerate, location)
+    prior = await _load_prior_snapshot(session, location.id)
+    observed = await asyncio.to_thread(_enumerate, location, prior)
     ctx.check_boundary()
 
     # Stage observations in bounded batches; staging rows are invisible to
@@ -200,6 +232,7 @@ async def handle_scan_location(ctx: JobContext) -> None:
                 extension=item.extension,
                 size_bytes=item.size_bytes,
                 mtime=item.mtime,
+                sha256=item.sha256,
             )
             for item in batch
         )
@@ -237,14 +270,8 @@ async def handle_scan_location(ctx: JobContext) -> None:
         ctx.cancel_requested = True
         ctx.check_boundary()
 
-    params = {
-        "location_id": location.id,
-        "job_id": job.id,
-        "attempt_number": job.attempt_count,
-    }
-    await session.execute(_RECONCILE_UPSERT, params)
-    result = await session.execute(_RECONCILE_MISSING, params)
-    marked_missing = getattr(result, "rowcount", 0)
+    counts = await _apply_reconciliation(session, location, job)
+    enqueued = await _enqueue_indexing(ctx, location)
     now = await db_now(session)
     location.last_successful_scan_at = now
     if location.sentinel_id is None and check.observed_sentinel is not None:
@@ -259,5 +286,117 @@ async def handle_scan_location(ctx: JobContext) -> None:
         job_id=str(job.id),
         location_id=str(location.id),
         files_observed=len(observed),
-        files_marked_missing=marked_missing,
+        index_jobs_enqueued=enqueued,
+        **counts,
     )
+
+
+async def _enqueue_indexing(ctx: JobContext, location: SourceLocation) -> int:
+    """Enqueue an index_file job per entry still needing indexing.
+
+    Runs in the scan's final transaction so indexing is queued atomically with
+    reconciliation. Deduped per catalog entry, so repeated scans coalesce onto
+    the open index job instead of piling up.
+    """
+    await ctx.session.flush()  # new/updated entries must have ids + states set
+    entry_ids = (
+        await ctx.session.scalars(
+            select(CatalogEntry.id).where(
+                CatalogEntry.source_location_id == location.id,
+                CatalogEntry.state == CatalogEntryState.discovered.value,
+            )
+        )
+    ).all()
+    enqueued = 0
+    for entry_id in entry_ids:
+        _, coalesced = await ctx.engine.enqueue(
+            ctx.session,
+            job_type=JobType.index_file,
+            payload={"version": 1, "catalog_entry_id": str(entry_id)},
+            origin=JobOrigin.handler,
+            catalog_entry_id=entry_id,
+            dedupe_key=f"index:{entry_id}",
+            max_attempts=get_settings().job_max_attempts,
+            actor="scan",
+        )
+        if not coalesced:
+            enqueued += 1
+    return enqueued
+
+
+async def _apply_reconciliation(
+    session: AsyncSession, location: SourceLocation, job: IngestionJob
+) -> dict[str, int]:
+    """Fold staged observations into the catalog and return transition counts."""
+    entries = (
+        await session.scalars(
+            select(CatalogEntry).where(CatalogEntry.source_location_id == location.id)
+        )
+    ).all()
+    by_id = {entry.id: entry for entry in entries}
+    catalog_rows = [
+        CatalogRow(
+            id=entry.id,
+            relative_path=entry.relative_path,
+            state=entry.state,
+            size_bytes=entry.last_observed_size_bytes,
+            mtime=entry.last_observed_mtime,
+            sha256=entry.sha256,
+        )
+        for entry in entries
+    ]
+    staged = await session.scalars(
+        select(ScanObservation).where(
+            ScanObservation.job_id == job.id,
+            ScanObservation.attempt_number == job.attempt_count,
+        )
+    )
+    observations = [
+        ObservedFile(
+            relative_path=row.relative_path,
+            file_name=row.file_name,
+            extension=row.extension,
+            size_bytes=row.size_bytes,
+            mtime=row.mtime,
+            sha256=row.sha256,
+        )
+        for row in staged
+    ]
+
+    plan = reconcile(catalog_rows, observations)
+    now = await db_now(session)
+
+    for add in plan.adds:
+        obs = add.observed
+        session.add(
+            CatalogEntry(
+                source_location_id=location.id,
+                relative_path=obs.relative_path,
+                file_name=obs.file_name,
+                extension=obs.extension,
+                state=CatalogEntryState.discovered.value,
+                last_observed_size_bytes=obs.size_bytes,
+                last_observed_mtime=obs.mtime,
+                sha256=obs.sha256,
+            )
+        )
+    for upd in plan.updates:
+        entry = by_id[upd.entry_id]
+        obs = upd.observed
+        # A move retargets the path in place, preserving indexed state/content.
+        entry.relative_path = obs.relative_path
+        entry.file_name = obs.file_name
+        entry.extension = obs.extension
+        entry.last_observed_size_bytes = obs.size_bytes
+        entry.last_observed_mtime = obs.mtime
+        entry.sha256 = obs.sha256
+        entry.state = upd.state
+        entry.last_seen_at = now
+        if upd.clear_missing:
+            entry.missing_since = None
+    for mark in plan.missing:
+        entry = by_id[mark.entry_id]
+        entry.state = CatalogEntryState.missing.value
+        entry.missing_since = now
+
+    return plan.counts()

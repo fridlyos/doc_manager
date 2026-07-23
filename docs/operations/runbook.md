@@ -1,13 +1,15 @@
 # Phase 1 operations runbook
 
-Local stack: PostgreSQL, Qdrant, the FastAPI API, and the worker on Windows
-Docker Desktop with the WSL 2 Linux engine. This runbook covers the one-command
-start, supported platform, storage rules, and the mapped-drive validation that
-Phase 1 must prove.
+Local stack: PostgreSQL, Qdrant, the FastAPI API, and the worker on Docker
+Desktop with the WSL 2 Linux engine, started from native Windows or an
+integrated WSL terminal. This runbook covers the one-command start, supported
+platform, storage rules, and the mapped-drive validation that Phase 1 must
+prove.
 
 ## Prerequisites
 
-- Windows with a current WSL 2 kernel.
+- Windows with a current WSL 2 kernel, or a Docker-integrated WSL 2
+  distribution.
 - Docker Desktop using the **WSL 2 Linux engine** and **Linux containers**.
   Record the Docker Desktop and Compose versions and pin the minimum supported
   versions before first production data.

@@ -9,6 +9,8 @@ export function App() {
         <nav aria-label="Primary navigation">
           <NavLink to="/">Status</NavLink>
           <NavLink to="/locations">Locations</NavLink>
+          <NavLink to="/documents">Documents</NavLink>
+          <NavLink to="/errors">Errors</NavLink>
           <NavLink to="/jobs">Jobs</NavLink>
         </nav>
       </header>

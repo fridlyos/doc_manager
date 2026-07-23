@@ -88,13 +88,14 @@ def pg_url() -> str:
 @pytest.fixture
 async def db_engine(pg_url: str) -> AsyncIterator[AsyncEngine]:
     engine = create_async_engine(pg_url, poolclass=None)
-    # Isolate tests: wipe all Phase 2 tables between tests.
+    # Isolate tests: wipe all ingestion tables between tests.
     async with engine.begin() as conn:
         await conn.execute(
             text(
                 "TRUNCATE scan_observations, job_events, job_checkpoints,"
                 " ingestion_job_attempts, idempotency_records, ingestion_jobs,"
-                " catalog_entries, source_locations, scheduler_state CASCADE"
+                " file_versions, content_objects, catalog_entries,"
+                " source_locations, scheduler_state CASCADE"
             )
         )
     yield engine
