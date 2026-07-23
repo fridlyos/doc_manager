@@ -15,8 +15,10 @@ Scope = TECHSTACK §14 "Phase 4: Chunking, Embeddings, and Vector Search".
 | 4.b | FastEmbed adapter + embedding-profile validation | **✅ complete** |
 | 4.c | Qdrant collection lifecycle + idempotent point operations | **✅ complete** |
 | 4.d | `/search` with filters, thresholds, snippets, pages, current paths | **✅ complete** |
-| 4.e | Search UI + vector/catalog consistency check | ⬜ not started |
+| 4.e | Search UI + vector/catalog consistency check | **✅ complete** |
 | — | **Integration: extend `index_file` with chunk → embed → upsert** | **✅ complete** |
+
+**Phase 4 is complete.** All deliverables and exit criteria are met.
 
 ## Exit criteria (whole phase)
 
@@ -115,6 +117,21 @@ Real-stack smoke (real bge-small + real Qdrant): renewal doc ranks first
 Exit criteria met: (1) re-index creates no duplicate chunks/points; (2) a golden
 query retrieves the expected synthetic evidence; (3) search runs with no generation
 provider. Only 4.e (search UI + consistency check) remains in Phase 4.
+
+### 4.e — Search UI + vector/catalog consistency check ✅ (2026-07-23)
+
+Delivered: `catalog_consistency_check` job (`jobs/handlers/consistency.py`,
+registered in `HANDLERS`) diffing SQL `chunks` vs Qdrant points per embedding
+profile — `ConsistencyReport` (missing/orphan/drift), report-only, no model load
+(`resolve_embedding_profile`); repository `point_ids_for_content` now filters by
+embedding profile and guards a missing collection. Frontend `SearchPage` (`/search`,
+nav) over `POST /search`: query + location + extension filters, hit cards with
+display_path, page label, availability badge, score, and snippet; `client.ts`
+`search()`. Backend **163 pass** (4 consistency tests); frontend **15 pass** (2
+search tests); ruff/mypy/eslint/tsc clean; frontend build succeeds.
+**Full report: `docs/architecture/phase-4e-search-ui-consistency.md`.**
+
+**Phase 4 complete** — all deliverables + integration done; all three exit criteria met.
 
 ---
 

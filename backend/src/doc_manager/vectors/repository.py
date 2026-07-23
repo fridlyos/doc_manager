@@ -145,14 +145,28 @@ class QdrantRepository:
         )
         return result.count
 
-    async def point_ids_for_content(self, content_object_id: uuid.UUID | str) -> set[str]:
-        """All point IDs for a content object (for SQL↔vector consistency checks)."""
+    async def point_ids_for_content(
+        self,
+        content_object_id: uuid.UUID | str,
+        *,
+        embedding_profile_hash: str | None = None,
+    ) -> set[str]:
+        """All point IDs for a content object (for SQL↔vector consistency checks).
+
+        Optionally restrict to one embedding profile (a content object may hold
+        points under several). Returns empty if the collection does not exist yet.
+        """
+        if not await self._client.collection_exists(self._collection):
+            return set()
+        scroll_filter = _content_filter(
+            [str(content_object_id)], embedding_profile_hash=embedding_profile_hash
+        )
         ids: set[str] = set()
         offset: uuid.UUID | int | str | None = None
         while True:
             points, offset = await self._client.scroll(
                 self._collection,
-                scroll_filter=_content_filter([str(content_object_id)]),
+                scroll_filter=scroll_filter,
                 limit=256,
                 offset=offset,
                 with_payload=False,
@@ -173,14 +187,22 @@ class QdrantRepository:
             ) from exc
 
 
-def _content_filter(content_object_ids: list[str]) -> models.Filter:
-    return models.Filter(
-        must=[
+def _content_filter(
+    content_object_ids: list[str], *, embedding_profile_hash: str | None = None
+) -> models.Filter:
+    must: list[models.Condition] = [
+        models.FieldCondition(
+            key="content_object_id", match=models.MatchAny(any=content_object_ids)
+        )
+    ]
+    if embedding_profile_hash is not None:
+        must.append(
             models.FieldCondition(
-                key="content_object_id", match=models.MatchAny(any=content_object_ids)
+                key="embedding_profile_hash",
+                match=models.MatchValue(value=embedding_profile_hash),
             )
-        ]
-    )
+        )
+    return models.Filter(must=must)
 
 
 def _hit(point: models.ScoredPoint) -> SearchHit:

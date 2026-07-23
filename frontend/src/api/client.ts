@@ -231,3 +231,49 @@ export async function reindexDocument(documentId: string): Promise<Job> {
   });
   return result.data;
 }
+
+export interface SearchPath {
+  catalog_entry_id: string;
+  source_location_id: string;
+  display_path: string;
+  state: string;
+  is_primary: boolean;
+}
+
+export interface SearchHit {
+  chunk_id: string;
+  content_object_id: string;
+  similarity_score: number;
+  page_start: number | null;
+  page_end: number | null;
+  snippet: string;
+  availability: "current" | "missing" | "historical";
+  paths: SearchPath[];
+}
+
+export interface SearchResponse {
+  results: SearchHit[];
+  result_count: number;
+  top_k: number;
+}
+
+export interface SearchRequest {
+  query: string;
+  filters?: {
+    source_location_ids?: string[];
+    extensions?: string[];
+  };
+  retrieval?: {
+    top_k?: number;
+    score_threshold?: number;
+  };
+}
+
+export async function search(body: SearchRequest): Promise<SearchResponse> {
+  const result = await apiFetch<Resource<SearchResponse>>("/api/v1/search", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(body),
+  });
+  return result.data;
+}
