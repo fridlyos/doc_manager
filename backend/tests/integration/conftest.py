@@ -14,6 +14,7 @@ from __future__ import annotations
 import os
 import socket
 from collections.abc import AsyncIterator
+from dataclasses import dataclass
 from pathlib import Path
 
 import psycopg
@@ -94,7 +95,7 @@ async def db_engine(pg_url: str) -> AsyncIterator[AsyncEngine]:
             text(
                 "TRUNCATE scan_observations, job_events, job_checkpoints,"
                 " ingestion_job_attempts, idempotency_records, ingestion_jobs,"
-                " file_versions, content_objects, catalog_entries,"
+                " chunks, file_versions, content_objects, catalog_entries,"
                 " source_locations, scheduler_state CASCADE"
             )
         )
@@ -105,3 +106,72 @@ async def db_engine(pg_url: str) -> AsyncIterator[AsyncEngine]:
 @pytest.fixture
 def session_factory(db_engine: AsyncEngine) -> async_sessionmaker[AsyncSession]:
     return async_sessionmaker(db_engine, expire_on_commit=False)
+
+
+# --- Deterministic offline embedding + in-memory Qdrant --------------------
+# Phase 4 indexing/search go through FastEmbed + Qdrant. Tests must not download a
+# model or need a server, so a fake embedder (stable hash-derived vectors) and an
+# in-memory Qdrant client stand in. Query and passage share the derivation so a
+# query embeds close to the chunk that contains its words.
+
+_FAKE_DIM = 8
+
+
+class FakeEmbeddingService:
+    """Deterministic bag-of-words embedder over a tiny fixed vocabulary."""
+
+    def __init__(self) -> None:
+        from doc_manager.embedding.profile import EmbeddingProfile
+
+        self.profile = EmbeddingProfile(model_name="fake/test", vector_size=_FAKE_DIM)
+
+    @staticmethod
+    def _vector(text: str) -> list[float]:
+        import hashlib
+        import math
+
+        vec = [0.0] * _FAKE_DIM
+        for token in text.lower().split():
+            slot = hashlib.sha256(token.encode()).digest()[0] % _FAKE_DIM
+            vec[slot] += 1.0
+        norm = math.sqrt(sum(v * v for v in vec)) or 1.0
+        return [v / norm for v in vec]
+
+    def embed_documents(self, texts: list[str]) -> list[list[float]]:
+        return [self._vector(t) for t in texts]
+
+    def embed_query(self, text: str) -> list[float]:
+        return self._vector(text)
+
+
+@dataclass
+class VectorEnv:
+    client: object  # AsyncQdrantClient
+    embedding: FakeEmbeddingService
+
+    def repository(self, settings: object) -> object:
+        from doc_manager.vectors import QdrantRepository
+
+        collection = self.embedding.profile.collection_name(settings.qdrant_collection)  # type: ignore[attr-defined]
+        return QdrantRepository(self.client, collection=collection)
+
+
+@pytest.fixture
+def vector_env(monkeypatch: pytest.MonkeyPatch) -> VectorEnv:
+    """Patch index_file's embedding + Qdrant builders to offline fakes.
+
+    Returns the shared in-memory client so a test can inspect points, and the fake
+    embedder so a test can embed the same way the retrieval layer does.
+    """
+    from qdrant_client import AsyncQdrantClient
+
+    env = VectorEnv(client=AsyncQdrantClient(location=":memory:"), embedding=FakeEmbeddingService())
+    monkeypatch.setattr(
+        "doc_manager.jobs.handlers.index_file.build_embedding_service",
+        lambda settings: env.embedding,
+    )
+    monkeypatch.setattr(
+        "doc_manager.jobs.handlers.index_file.build_qdrant_repository",
+        lambda settings, profile: env.repository(settings),
+    )
+    return env

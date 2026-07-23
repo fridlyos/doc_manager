@@ -5,6 +5,13 @@ structure hash plus the extraction/normalization profile — text-equivalent fil
 with different pagination stay separate for citation correctness. `file_versions`
 records the observed bytes of a catalog entry at a point in time and links to the
 content object once extraction succeeds (or carries an extraction error).
+
+`chunks` is the SQL authority for the retrieval chunks derived from a content
+object under a chunking profile (Phase 4.a). Rows are metadata only — the chunk
+text lives in the Qdrant point payload and the extracted artifact, not here — so a
+consistency check can compare SQL chunk rows against vector points. The primary
+key is the deterministic chunk id (content object + chunking profile + index), so
+re-indexing the same content is an idempotent upsert.
 """
 
 from __future__ import annotations
@@ -74,6 +81,41 @@ class FileVersion(Base):
     error_message: Mapped[str | None] = mapped_column(Text, default=None)
     observed_at: Mapped[datetime] = mapped_column(server_default=func.clock_timestamp())
     indexed_at: Mapped[datetime | None] = mapped_column(default=None)
+    created_at: Mapped[datetime] = mapped_column(server_default=func.clock_timestamp())
+    updated_at: Mapped[datetime] = mapped_column(
+        server_default=func.clock_timestamp(), onupdate=func.clock_timestamp()
+    )
+
+
+class Chunk(Base):
+    __tablename__ = "chunks"
+    __table_args__ = (
+        # Deterministic identity: one row per chunk of a content object under a
+        # chunking profile. The primary key already equals this triple's UUIDv5,
+        # but the explicit constraint documents and enforces the reuse key.
+        UniqueConstraint(
+            "content_object_id",
+            "chunking_profile_hash",
+            "chunk_index",
+            name="uq_chunks_identity",
+        ),
+        Index("ix_chunks_content_object", "content_object_id"),
+    )
+
+    #: Deterministic chunk id = uuid5(content_object_id, chunking_profile, index).
+    id: Mapped[uuid.UUID] = mapped_column(primary_key=True)
+    content_object_id: Mapped[uuid.UUID] = mapped_column(
+        ForeignKey("content_objects.id", ondelete="CASCADE")
+    )
+    chunk_index: Mapped[int] = mapped_column(BigInteger)
+    #: Physical page range covered (1-based, inclusive); NULL for pageless formats.
+    page_start: Mapped[int | None] = mapped_column(BigInteger, default=None)
+    page_end: Mapped[int | None] = mapped_column(BigInteger, default=None)
+    token_count: Mapped[int] = mapped_column(BigInteger)
+    text_hash: Mapped[str] = mapped_column(String(64))
+    chunking_profile_hash: Mapped[str] = mapped_column(String(64))
+    #: Embedding profile whose vector points currently represent this chunk.
+    embedding_profile_hash: Mapped[str] = mapped_column(String(64))
     created_at: Mapped[datetime] = mapped_column(server_default=func.clock_timestamp())
     updated_at: Mapped[datetime] = mapped_column(
         server_default=func.clock_timestamp(), onupdate=func.clock_timestamp()

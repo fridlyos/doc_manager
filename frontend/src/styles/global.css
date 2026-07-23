@@ -321,3 +321,58 @@ code {
   margin: 0;
   overflow-wrap: anywhere;
 }
+
+.search-results {
+  list-style: none;
+  padding: 0;
+  margin: 0;
+  display: grid;
+  gap: 0.75rem;
+}
+
+.search-hit {
+  padding: 0.75rem 1rem;
+  background: var(--panel);
+  border-radius: 0.5rem;
+}
+
+.search-hit-head {
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+  gap: 1rem;
+  flex-wrap: wrap;
+}
+
+.search-path {
+  overflow-wrap: anywhere;
+}
+
+.search-meta {
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
+}
+
+.search-score {
+  color: var(--muted);
+  font-variant-numeric: tabular-nums;
+}
+
+.search-snippet {
+  margin: 0.5rem 0 0;
+  color: var(--text);
+}
+
+.availability-current {
+  color: var(--up);
+  border: 1px solid var(--up);
+}
+.availability-missing {
+  color: var(--down);
+  border: 1px solid var(--down);
+}
+.availability-historical {
+  color: #d29922;
+  border: 1px solid #d29922;
+}
