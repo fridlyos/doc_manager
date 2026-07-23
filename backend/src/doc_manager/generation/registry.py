@@ -19,10 +19,14 @@ Phase 5.a ships the gate; concrete adapters register in 5.b (Ollama) and 5.d
 from __future__ import annotations
 
 from collections.abc import Sequence
+from importlib.util import find_spec
 
 from doc_manager.core.config import Settings
+from doc_manager.core.logging import get_logger
 from doc_manager.generation.base import DataBoundary, GenerationProvider
 from doc_manager.generation.errors import GenerationError, GenerationErrorCode
+
+log = get_logger("doc_manager.generation.registry")
 
 
 def _allowlist(settings: Settings) -> set[str]:
@@ -81,10 +85,23 @@ class ProviderRegistry:
 def build_registry(settings: Settings) -> ProviderRegistry:
     """Assemble the deployment's providers.
 
-    The local Ollama adapter is always registered (eligibility still gates use);
-    the OpenAI adapter (5.d) appends itself here when implemented.
+    The local Ollama adapter is always registered (eligibility still gates use).
+    The external OpenAI adapter is registered only when the ``openai`` extra is
+    installed and a model is configured — eligibility (opt-in + allowlist +
+    secret) and the external-processing policy still gate every actual use.
     """
     from doc_manager.generation.ollama import build_ollama_provider
 
     providers: list[GenerationProvider] = [build_ollama_provider(settings)]
+
+    if settings.openai_model and find_spec("openai") is not None:
+        from doc_manager.generation.openai_provider import build_openai_provider
+
+        providers.append(build_openai_provider(settings))
+    elif settings.external_llm_enabled and "openai" in _allowlist(settings):
+        log.warning(
+            "openai_provider_unavailable",
+            reason="missing openai extra or openai_model not configured",
+        )
+
     return ProviderRegistry(providers)

@@ -16,7 +16,7 @@ changes** — this layer consumes the existing `RetrievalService`.
 | 5.a | Provider interface + registry, health, streaming events, cancellation, usage, bounded timeouts | **✅ complete** |
 | 5.b | Ollama adapter (default local provider) | **✅ complete** |
 | 5.c | Deployment/source external-processing policy, `deny` default, no auto-fallback | **✅ complete** |
-| 5.d | OpenAI Responses adapter (official SDK, `store=false`, stateless streaming, Docker-secret auth) | ⬜ not started |
+| 5.d | OpenAI Responses adapter (official SDK, `store=false`, stateless streaming, Docker-secret auth) | **✅ complete** |
 | 5.e | Provider-neutral evidence selection, grounded prompts, server-owned citation mapping | ⬜ not started |
 | 5.f | State handling: insufficient-evidence, provider-unavailable, auth, rate-limit, policy-denied, refusal | ⬜ not started |
 | 5.g | Ask UI: provider selection, streamed answer/evidence cards, Local/External badge, external preview/confirm | ⬜ not started |
@@ -123,6 +123,22 @@ suite **192 pass**; ruff/mypy clean. **Full report:
 
 Progresses exit criterion 4 (external mode sends only allowed text — enforced by
 the policy gate + zero-metadata boundary counters) and 5 (no fallback).
+
+### 5.d — OpenAI Responses adapter (opt-in external) ✅ (2026-07-23)
+
+Delivered `generation/openai_provider.py`: `OpenAIProvider` over the Responses API
+— `responses.create(instructions, input, max_output_tokens, store=False,
+stream=True)`, no tools/previous_response_id/conversation/background. Streaming
+events normalized by `type` (`output_text.delta`→`GenDelta`; `refusal.delta`→
+`GenRefusal`; `incomplete`→length; `completed`→usage+stop; `failed`/`error`→
+raise). SDK errors mapped (auth/rate-limit/timeout/connection/other →
+`provider_*`); `max_retries=0`. Key from `read_openai_api_key()` (Docker
+secret/API-service only), lazy `openai` import (base install works without the
+extra), registered in `build_registry` only when the extra is present + model
+configured (eligibility + policy still gate use). Config adds
+`openai_context_tokens`. 13 unit tests (fake client + real SDK exceptions;
+`importorskip`); full backend suite **205 pass**; ruff/mypy clean. Live smoke
+deferred to 5.h. **Full report: `docs/architecture/phase-5d-openai.md`.**
 
 ---
 

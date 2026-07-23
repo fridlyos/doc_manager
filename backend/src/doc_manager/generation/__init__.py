@@ -32,6 +32,7 @@ from doc_manager.generation.events import (
     Usage,
 )
 from doc_manager.generation.ollama import OllamaProvider, build_ollama_provider
+from doc_manager.generation.openai_provider import OpenAIProvider, build_openai_provider
 from doc_manager.generation.policy import (
     ExternalDecision,
     PolicyOutcome,
@@ -57,12 +58,14 @@ __all__ = [
     "GenerationProvider",
     "GenerationRequest",
     "OllamaProvider",
+    "OpenAIProvider",
     "PolicyOutcome",
     "ProviderCapabilities",
     "ProviderReadiness",
     "ProviderRegistry",
     "Usage",
     "build_ollama_provider",
+    "build_openai_provider",
     "build_registry",
     "confirmation_summary",
     "evaluate_external_policy",

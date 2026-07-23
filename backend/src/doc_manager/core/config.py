@@ -83,6 +83,9 @@ class Settings(BaseSettings):
 
     openai_model: str | None = None
     openai_api_key_file: Path | None = None
+    # Context window advertised for the configured OpenAI model (drives evidence
+    # budgeting). Refine per model if needed.
+    openai_context_tokens: int = 128_000
 
     # --- Embeddings + artifacts ---
     embedding_model: str = "BAAI/bge-small-en-v1.5"
