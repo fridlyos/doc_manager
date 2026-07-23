@@ -173,7 +173,8 @@ def test_duplicate_provider_id_rejected() -> None:
         )
 
 
-def test_build_registry_is_empty_until_adapters_land() -> None:
-    # 5.a foundation: no concrete adapters yet.
+def test_build_registry_registers_local_ollama() -> None:
+    # The local Ollama adapter (5.b) is always registered; eligibility still gates
+    # use. The external OpenAI adapter appends in 5.d.
     reg = build_registry(_settings())
-    assert reg.all() == []
+    assert [p.provider_id for p in reg.all()] == ["ollama"]

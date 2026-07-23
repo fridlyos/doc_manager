@@ -14,7 +14,7 @@ changes** — this layer consumes the existing `RetrievalService`.
 | # | Deliverable | Status |
 | --- | --- | --- |
 | 5.a | Provider interface + registry, health, streaming events, cancellation, usage, bounded timeouts | **✅ complete** |
-| 5.b | Ollama adapter (default local provider) | ⬜ not started |
+| 5.b | Ollama adapter (default local provider) | **✅ complete** |
 | 5.c | Deployment/source external-processing policy, `deny` default, no auto-fallback | ⬜ not started |
 | 5.d | OpenAI Responses adapter (official SDK, `store=false`, stateless streaming, Docker-secret auth) | ⬜ not started |
 | 5.e | Provider-neutral evidence selection, grounded prompts, server-owned citation mapping | ⬜ not started |
@@ -90,6 +90,23 @@ backend suite **173 pass**; ruff/mypy clean. **Full report:
 `docs/architecture/phase-5a-generation-foundation.md`.**
 
 Progresses exit criterion 5 (no automatic fallback — enforced by the registry gate).
+
+### 5.b — Ollama adapter (default local provider) ✅ (2026-07-23)
+
+Delivered `generation/ollama.py`: `OllamaProvider` streams `POST /api/chat`
+(`stream:true`) and normalizes the NDJSON into `GenStarted → GenDelta* → GenUsage
+→ GenFinished` (usage from `prompt_eval_count`/`eval_count`; `done_reason` →
+`FinishReason`). `readiness()` checks `/api/tags` for the pulled model (never
+downloads); `secret_available` = True; `data_boundary = local`. Errors map:
+connect → `provider_unavailable`, HTTP/inline error → `provider_error`. Registered
+in `build_registry` (always present; eligibility still gates external). Adapter
+takes an injectable `httpx` transport so tests use `httpx.MockTransport` (no
+`respx` dep). Config adds `ollama_num_ctx` (8192). 9 unit tests; full backend suite
+**182 pass**; ruff/mypy clean. Live-smoke verified against real Ollama on
+`host.docker.internal:11434` (readiness + streamed events + usage). **Full report:
+`docs/architecture/phase-5b-ollama.md`.**
+
+Progresses exit criterion 3 (local mode contacts no cloud service).
 
 ---
 

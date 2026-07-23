@@ -81,8 +81,10 @@ class ProviderRegistry:
 def build_registry(settings: Settings) -> ProviderRegistry:
     """Assemble the deployment's providers.
 
-    Empty in 5.a; the Ollama adapter (5.b) and the OpenAI adapter (5.d) append
-    themselves here as they are implemented.
+    The local Ollama adapter is always registered (eligibility still gates use);
+    the OpenAI adapter (5.d) appends itself here when implemented.
     """
-    providers: list[GenerationProvider] = []
+    from doc_manager.generation.ollama import build_ollama_provider
+
+    providers: list[GenerationProvider] = [build_ollama_provider(settings)]
     return ProviderRegistry(providers)

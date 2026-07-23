@@ -77,6 +77,9 @@ class Settings(BaseSettings):
 
     ollama_url: str = "http://host.docker.internal:11434"
     ollama_chat_model: str = "llama3.1:8b"
+    # Context window (tokens) advertised for the local model; drives evidence
+    # budgeting and is passed to Ollama as options.num_ctx.
+    ollama_num_ctx: int = 8192
 
     openai_model: str | None = None
     openai_api_key_file: Path | None = None

@@ -24,6 +24,7 @@ from doc_manager.generation.events import (
     GenUsage,
     Usage,
 )
+from doc_manager.generation.ollama import OllamaProvider, build_ollama_provider
 from doc_manager.generation.registry import ProviderRegistry, build_registry
 from doc_manager.generation.timeout import stream_with_timeout
 
@@ -40,10 +41,12 @@ __all__ = [
     "GenerationEvent",
     "GenerationProvider",
     "GenerationRequest",
+    "OllamaProvider",
     "ProviderCapabilities",
     "ProviderReadiness",
     "ProviderRegistry",
     "Usage",
+    "build_ollama_provider",
     "build_registry",
     "stream_with_timeout",
 ]
