@@ -116,7 +116,7 @@ Real-stack smoke (real bge-small + real Qdrant): renewal doc ranks first
 
 Exit criteria met: (1) re-index creates no duplicate chunks/points; (2) a golden
 query retrieves the expected synthetic evidence; (3) search runs with no generation
-provider. Only 4.e (search UI + consistency check) remains in Phase 4.
+provider. (4.e — search UI + consistency check — completed next; see below.)
 
 ### 4.e — Search UI + vector/catalog consistency check ✅ (2026-07-23)
 
