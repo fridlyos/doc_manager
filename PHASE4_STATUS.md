@@ -12,7 +12,7 @@ Scope = TECHSTACK §14 "Phase 4: Chunking, Embeddings, and Vector Search".
 | # | Deliverable | Status |
 | --- | --- | --- |
 | 4.a | Deterministic page-aware chunking | **✅ complete** |
-| 4.b | FastEmbed adapter + embedding-profile validation | ⬜ not started |
+| 4.b | FastEmbed adapter + embedding-profile validation | **✅ complete** |
 | 4.c | Qdrant collection lifecycle + idempotent point operations | ⬜ not started |
 | 4.d | `/search` with filters, thresholds, snippets, pages, current paths | ⬜ not started |
 | 4.e | Search UI + vector/catalog consistency check | ⬜ not started |
@@ -60,6 +60,23 @@ ruff/mypy clean. **Full report: `docs/architecture/phase-4a-chunking.md`.**
 
 Resolves open decision #1 (tokenizer source): pluggable, pure whitespace default
 now; model-accurate tokenizer becomes a distinct profile in 4.b.
+
+### 4.b — FastEmbed adapter + embedding-profile validation ✅ (2026-07-22)
+
+Delivered `doc_manager/embedding/` (dep `fastembed>=0.8.0`): `profile.py`
+(`EmbeddingProfile` — model/vector_size/distance/normalize/prefix_scheme/version;
+`embedding_profile_hash`, `collection_name` = `{base}__{model-slug}__{hash[:12]}`,
+`is_compatible_with` for 4.c collection validation), `service.py` (`Embedder`
+protocol, `EmbeddingService` with separate `embed_documents`/`embed_query` prefix
+paths, per-vector size validation, `lru_cache`d model load, lazy FastEmbed import),
+`errors.py`. Config adds `embedding_batch_size`. 11 unit tests (offline via a fake
+embedder; one real-registry dim lookup); full backend suite **133 pass**;
+ruff/mypy clean. Verified end-to-end against real bge-small-en-v1.5: 384-d
+normalized vectors, relevant passage outranks distractor (0.73 vs 0.45).
+**Full report: `docs/architecture/phase-4b-embeddings.md`.**
+
+Resolves open decision #3 (collection-per-profile naming). Makes the embedding
+profile hash available for the 4.c point identity (open decision #2).
 
 ---
 

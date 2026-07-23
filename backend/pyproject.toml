@@ -17,6 +17,7 @@ dependencies = [
     "tenacity>=9.0",
     "pymupdf>=1.24",
     "charset-normalizer>=3.4",
+    "fastembed>=0.8.0",
 ]
 
 [project.optional-dependencies]
@@ -69,6 +70,13 @@ disallow_untyped_defs = true
 # every call under strict mode's disallow_untyped_calls.
 [[tool.mypy.overrides]]
 module = "pymupdf.*"
+follow_imports = "skip"
+follow_untyped_imports = true
+
+# FastEmbed and its numeric deps carry no usable stubs; treat as Any rather than
+# flagging every call under strict mode.
+[[tool.mypy.overrides]]
+module = ["fastembed.*", "numpy.*"]
 follow_imports = "skip"
 follow_untyped_imports = true
 

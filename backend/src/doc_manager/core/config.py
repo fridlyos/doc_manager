@@ -77,6 +77,7 @@ class Settings(BaseSettings):
 
     # --- Embeddings + artifacts ---
     embedding_model: str = "BAAI/bge-small-en-v1.5"
+    embedding_batch_size: int = 256
     artifact_root: Path = Path("/app-data/extracted-text")
     frontend_dist: Path = Path("/app/frontend-dist")
     allowed_source_roots: str = "/sources"
