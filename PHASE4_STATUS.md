@@ -11,7 +11,7 @@ Scope = TECHSTACK §14 "Phase 4: Chunking, Embeddings, and Vector Search".
 
 | # | Deliverable | Status |
 | --- | --- | --- |
-| 4.a | Deterministic page-aware chunking | ⬜ not started |
+| 4.a | Deterministic page-aware chunking | **✅ complete** |
 | 4.b | FastEmbed adapter + embedding-profile validation | ⬜ not started |
 | 4.c | Qdrant collection lifecycle + idempotent point operations | ⬜ not started |
 | 4.d | `/search` with filters, thresholds, snippets, pages, current paths | ⬜ not started |
@@ -40,6 +40,26 @@ Scope = TECHSTACK §14 "Phase 4: Chunking, Embeddings, and Vector Search".
   (page/section boundaries preserved at normalization) — it never reopens the original file.
 - **Lease-fenced publication (Phase 2/3).** The upsert + chunk-row publication happens in the
   `index_file` final fenced transaction, consistent with existing handlers.
+
+---
+
+## Completed work
+
+### 4.a — Deterministic page-aware chunker ✅ (2026-07-22)
+
+Delivered `doc_manager/chunking/` (pure library — no DB/vectors/FS):
+`tokenizer.py` (`Tokenizer` protocol + pure `WhitespaceTokenizer`, lossless on
+normalized text), `profile.py` (`ChunkingProfile` + `chunking_profile_hash`,
+`CHUNKING_VERSION="chunk-1"`, deterministic `chunk_id` via UUIDv5 over
+content-object + profile + index), and `chunker.py` (`Chunk` record +
+`chunk_pages`). Algorithm: page boundaries are preferred cut points — small pages
+are packed up to `target_tokens`, oversized pages are split into overlapping
+windows that never cross a page. Deterministic IDs make re-index an idempotent
+upsert (exit criterion 1). 13 unit tests; full backend suite **122 pass**;
+ruff/mypy clean. **Full report: `docs/architecture/phase-4a-chunking.md`.**
+
+Resolves open decision #1 (tokenizer source): pluggable, pure whitespace default
+now; model-accurate tokenizer becomes a distinct profile in 4.b.
 
 ---
 
