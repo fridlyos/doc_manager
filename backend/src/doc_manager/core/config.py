@@ -68,6 +68,12 @@ class Settings(BaseSettings):
     external_max_evidence_tokens: int = 12_000
     external_max_output_tokens: int = 2_000
     external_request_timeout_seconds: int = 90
+    # Local generation: max tokens to generate and the overall per-request
+    # deadline. The external path uses external_* above.
+    generation_max_output_tokens: int = 1_200
+    generation_request_timeout_seconds: float = 120.0
+    # SSE keep-alive comment interval for Ask streaming (contract §8.3: ≥ every 15s).
+    sse_keepalive_seconds: float = 15.0
 
     ollama_url: str = "http://host.docker.internal:11434"
     ollama_chat_model: str = "llama3.1:8b"

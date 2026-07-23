@@ -13,7 +13,7 @@ changes** — this layer consumes the existing `RetrievalService`.
 
 | # | Deliverable | Status |
 | --- | --- | --- |
-| 5.a | Provider interface + registry, health, streaming events, cancellation, usage, bounded timeouts | ⬜ not started |
+| 5.a | Provider interface + registry, health, streaming events, cancellation, usage, bounded timeouts | **✅ complete** |
 | 5.b | Ollama adapter (default local provider) | ⬜ not started |
 | 5.c | Deployment/source external-processing policy, `deny` default, no auto-fallback | ⬜ not started |
 | 5.d | OpenAI Responses adapter (official SDK, `store=false`, stateless streaming, Docker-secret auth) | ⬜ not started |
@@ -68,6 +68,28 @@ changes** — this layer consumes the existing `RetrievalService`.
   instructions + evidence text + opaque citation ids **only**. Never paths, file names,
   document/source/catalog ids, tags, or original files. Fail closed on any denied source;
   no automatic fallback.
+
+---
+
+## Completed work
+
+### 5.a — Provider interface, registry, normalized streaming ✅ (2026-07-23)
+
+Delivered `doc_manager/generation/` (foundation only — no adapters/endpoints):
+`events.py` (normalized `GenStarted/GenDelta/GenUsage/GenFinished/GenRefusal` +
+`FinishReason`, `Usage`), `base.py` (`GenerationProvider` protocol, `DataBoundary`,
+`ProviderCapabilities`, `GenerationRequest`, `ProviderReadiness`; `secret_available`
+gate hook; cooperative-cancel semantics), `errors.py` (`GenerationError` + code→HTTP
+taxonomy, per-code retryability), `timeout.py` (`stream_with_timeout` → maps expiry
+to `provider_timeout`, tears down the stream), `registry.py` (`ProviderRegistry`:
+`get`→`unknown_provider`, `require_eligible`→`provider_unavailable`, static
+eligibility gate — local always, external requires flag+allowlist+secret, **no
+fallback**; `build_registry` empty until 5.b/5.d). Config: `generation_max_output_tokens`,
+`generation_request_timeout_seconds`, `sse_keepalive_seconds`. 10 unit tests; full
+backend suite **173 pass**; ruff/mypy clean. **Full report:
+`docs/architecture/phase-5a-generation-foundation.md`.**
+
+Progresses exit criterion 5 (no automatic fallback — enforced by the registry gate).
 
 ---
 
