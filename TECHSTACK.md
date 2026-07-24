@@ -1476,6 +1476,36 @@ Exit criteria:
 - A full restore into empty volumes passes catalog/artifact/vector consistency and known-query checks.
 - Known limits and deferred features are documented.
 
+### Phase 9: UI Modification and Scan Progress Experience
+
+This phase modifies the completed backend and worker features into a complete,
+operator-facing UI. It does not move scanning into the browser; scans remain
+durable background worker jobs submitted and monitored through the API.
+
+Deliverables:
+
+a. Build the complete UI navigation and screens for Ask, Search, Catalog, Documents, Duplicates, Locations, Jobs, Errors, Status, and Sync Plans.
+b. Add location setup, validation, enable/disable, scan-now, scheduled-scan, cancel, retry, and re-index controls.
+c. Add a live scan-progress view showing:
+   - files discovered;
+   - files scanned and target count as `scanned / target`;
+   - files changed, indexed, skipped, failed, and remaining;
+   - elapsed time, start time, last update, current status, and error details.
+d. Set the initial UI scan target to **10,000 files per scan**, with the target exposed as configuration for larger collections.
+e. Add progress polling/event handling that survives page refreshes and reconnects to jobs already running in the worker.
+f. Add document detail, extraction-error, duplicate, coverage, citation, and current-path views with links to the relevant job or source record.
+g. Add empty, loading, partial-progress, completed, cancelled, failed, unavailable-source, and provider-unavailable states.
+h. Add responsive layout, keyboard navigation, accessible status announcements, and clear local/external provider indicators.
+i. Add UI component, API integration, and browser E2E tests for scan submission, progress updates, refresh/reconnect, cancellation, retry, and final counts.
+
+Exit criteria:
+
+- An operator can configure a source location and start or schedule a scan entirely from the UI.
+- Scanning continues independently of the browser session and remains visible after refresh or reconnect.
+- The UI accurately displays `scanned / target` and the discovered, indexed, skipped, failed, and remaining counts.
+- A scan of the synthetic corpus shows correct final counts and an explicit success or failure state.
+- All existing MVP screens and workflows are reachable, usable, and covered by browser-level smoke tests.
+
 ## 15. Delivery Order and Dependency Map
 
 ```text
