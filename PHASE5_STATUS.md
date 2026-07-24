@@ -20,7 +20,9 @@ changes** — this layer consumes the existing `RetrievalService`.
 | 5.e | Provider-neutral evidence selection, grounded prompts, server-owned citation mapping | **✅ complete** |
 | 5.f | State handling: insufficient-evidence, provider-unavailable, auth, rate-limit, policy-denied, refusal | **✅ complete** |
 | 5.g | Ask UI: provider selection, streamed answer/evidence cards, Local/External badge, external preview/confirm | **✅ complete** |
-| 5.h | Provider contract tests + optional synthetic OpenAI live smoke | ⬜ not started |
+| 5.h | Provider contract tests + optional synthetic OpenAI live smoke | **✅ complete** |
+
+**Phase 5 is complete.** All deliverables and exit criteria are met.
 
 ## Exit criteria (whole phase)
 
@@ -188,6 +190,21 @@ display_path, page, availability, snippet); external-confirmation preview
 **Full report: `docs/architecture/phase-5g-ask-ui.md`.**
 
 Only 5.h (provider contract fixtures + optional OpenAI live smoke) remains in Phase 5.
+
+### 5.h — Provider contract fixtures + optional live smoke ✅ (2026-07-23)
+
+Delivered `tests/unit/test_provider_contract.py`: one parametrization drives the
+**same** scripted answers through `AskService` for both the Ollama adapter
+(`httpx.MockTransport`) and the OpenAI adapter (fake SDK client), asserting
+identical grounding/citation outcomes (completed+citation, ordinal-by-appearance,
+invented-alias dropped+warning, model-declared insufficient, usage) modulo
+data_boundary — **exit criterion 6**. Opt-in OpenAI live smoke gated by
+`DOCMAN_OPENAI_LIVE`+`OPENAI_API_KEY` (asserts external classification + zero
+metadata counters). 10 contract tests + 1 skipped live; full backend suite
+**244 pass, 1 skipped**; ruff/mypy clean. **Full report:
+`docs/architecture/phase-5h-contract.md`.**
+
+**Phase 5 complete** — all deliverables 5.a–5.h; all six exit criteria met.
 
 ---
 
