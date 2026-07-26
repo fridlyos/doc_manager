@@ -96,3 +96,21 @@ def test_system_reindex_enqueues_durable_job(client: TestClient) -> None:
 def test_system_reindex_requires_idempotency_key(client: TestClient) -> None:
     resp = client.post("/api/v1/system/reindex")
     assert resp.status_code == 400
+
+
+def test_remove_stale_vectors_enqueues_durable_job(client: TestClient) -> None:
+    key = idem()
+    resp = client.post("/api/v1/system/remove-stale-vectors", headers={"Idempotency-Key": key})
+    assert resp.status_code == 202, resp.text
+    job = resp.json()["data"]
+    assert job["job_type"] == "remove_stale_vectors"
+    assert resp.headers["Location"] == f"/api/v1/jobs/{job['id']}"
+
+    replay = client.post("/api/v1/system/remove-stale-vectors", headers={"Idempotency-Key": key})
+    assert replay.json()["data"]["id"] == job["id"]
+    assert replay.json()["meta"]["idempotency_replayed"] is True
+
+
+def test_remove_stale_vectors_requires_idempotency_key(client: TestClient) -> None:
+    resp = client.post("/api/v1/system/remove-stale-vectors")
+    assert resp.status_code == 400

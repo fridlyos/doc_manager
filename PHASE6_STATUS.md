@@ -14,7 +14,7 @@ this layer schedules, fans out, reconciles, and reports over existing jobs.
 | # | Deliverable | Status |
 | --- | --- | --- |
 | 6.a | Per-location schedules + manual file/location/all re-indexing | **✅ complete** |
-| 6.b | Profile-driven full re-index jobs (`reindex_all_for_profile`) | ⬜ not started |
+| 6.b | Profile-driven full re-index jobs (`reindex_all_for_profile`) | **✅ complete** |
 | 6.c | Exact-file and normalized-text duplicate reports | ⬜ not started |
 | 6.d | Reuse canonical content/vectors across exact/structure-equivalent paths; report text-equivalent-different-pagination without sharing chunks; delete/stale cleanup | ⬜ not started |
 | 6.e | Duplicate and coverage UI | ⬜ not started |
@@ -86,6 +86,23 @@ suite **251 pass, 1 skipped**; ruff/mypy clean. **Full report:
 
 Progresses exit criterion 1 (change convergence — re-index applies current profiles
 idempotently). Scan scheduling itself was already delivered in Phase 2.
+
+### 6.b — Profile-driven rebuild + stale-vector retirement ✅ (2026-07-26)
+
+Delivered the **controlled rebuild** (exit criterion 3) as a two-step operator flow:
+`POST /system/reindex` (6.a) rebuilds under the new profile into a **new** Qdrant
+collection (profile isolation), then `POST /system/remove-stale-vectors` retires the
+old one. `jobs/handlers/cleanup.py` `handle_remove_stale_vectors` (registered for
+`JobType.remove_stale_vectors`) drops same-namespace collections != the active
+embedding profile's (`drop_stale_collections` helper); `QdrantRepository` gains
+`list_collection_names`/`drop_collection`. Chunk rows self-heal (embedding-agnostic
+`chunk_id` → in-place upsert), so only vector collections are retired; orphan/
+chunking-profile cleanup is 6.d. 4 tests (2 in-memory Qdrant, 2 endpoint); full
+backend suite **255 pass, 1 skipped**; ruff/mypy clean. **Full report:
+`docs/architecture/phase-6b-profile-rebuild.md`.**
+
+Resolves exit criterion 3 (explicit controlled rebuild, new-before-old, no mixed
+vectors).
 
 ---
 
