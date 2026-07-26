@@ -13,7 +13,7 @@ this layer schedules, fans out, reconciles, and reports over existing jobs.
 
 | # | Deliverable | Status |
 | --- | --- | --- |
-| 6.a | Per-location schedules + manual file/location/all re-indexing | ⬜ not started |
+| 6.a | Per-location schedules + manual file/location/all re-indexing | **✅ complete** |
 | 6.b | Profile-driven full re-index jobs (`reindex_all_for_profile`) | ⬜ not started |
 | 6.c | Exact-file and normalized-text duplicate reports | ⬜ not started |
 | 6.d | Reuse canonical content/vectors across exact/structure-equivalent paths; report text-equivalent-different-pagination without sharing chunks; delete/stale cleanup | ⬜ not started |
@@ -64,6 +64,28 @@ this layer schedules, fans out, reconciles, and reports over existing jobs.
 - Reuse rule (§5.4): artifacts/chunks/embeddings are reused only when the
   `structure_hash` **and** processing profiles match; text-equivalent files with
   **different pagination stay separate** for citation correctness.
+
+---
+
+## Completed work
+
+### 6.a — Manual re-indexing (file / location / all) ✅ (2026-07-26)
+
+Delivered `jobs/handlers/reindex.py` `handle_reindex_bulk` (registered for
+`JobType.reindex_all_for_profile`): scope-driven fan-out that selects eligible
+entries (sha256 set, state `indexed|failed|unsupported`; `location` scope filters
+by location) and enqueues a deduped `index_file` per entry under the parent's
+`root_job_id`, reports progress, completes lease-fenced. Endpoints
+`POST /locations/{id}/reindex` (scope location) and `POST /system/reindex`
+(scope all) — Idempotency-Key + 202 + `Location` + idempotent replay
+(`maintenance.py` router). File-level reindex stays `index_file` (resolves open
+decision #2: reuse, no separate handler). Re-index is idempotent — no duplicate
+chunks/points. 7 tests (2 PG+Qdrant fan-out/idempotency, 5 endpoint); full backend
+suite **251 pass, 1 skipped**; ruff/mypy clean. **Full report:
+`docs/architecture/phase-6a-reindex.md`.**
+
+Progresses exit criterion 1 (change convergence — re-index applies current profiles
+idempotently). Scan scheduling itself was already delivered in Phase 2.
 
 ---
 

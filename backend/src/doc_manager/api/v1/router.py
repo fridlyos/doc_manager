@@ -18,6 +18,7 @@ from doc_manager.api.v1.routes.documents import errors_router
 from doc_manager.api.v1.routes.documents import router as documents_router
 from doc_manager.api.v1.routes.jobs import router as jobs_router
 from doc_manager.api.v1.routes.locations import router as locations_router
+from doc_manager.api.v1.routes.maintenance import router as maintenance_router
 from doc_manager.api.v1.routes.search import router as search_router
 from doc_manager.core.config import get_settings
 from doc_manager.health import build_readiness
@@ -29,6 +30,7 @@ router.include_router(errors_router)
 router.include_router(search_router)
 router.include_router(ask_router)
 router.include_router(providers_router)
+router.include_router(maintenance_router)
 router.include_router(jobs_router)
 
 
