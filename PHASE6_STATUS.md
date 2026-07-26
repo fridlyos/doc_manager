@@ -15,7 +15,7 @@ this layer schedules, fans out, reconciles, and reports over existing jobs.
 | --- | --- | --- |
 | 6.a | Per-location schedules + manual file/location/all re-indexing | **✅ complete** |
 | 6.b | Profile-driven full re-index jobs (`reindex_all_for_profile`) | **✅ complete** |
-| 6.c | Exact-file and normalized-text duplicate reports | ⬜ not started |
+| 6.c | Exact-file and normalized-text duplicate reports | **✅ complete** |
 | 6.d | Reuse canonical content/vectors across exact/structure-equivalent paths; report text-equivalent-different-pagination without sharing chunks; delete/stale cleanup | ⬜ not started |
 | 6.e | Duplicate and coverage UI | ⬜ not started |
 
@@ -103,6 +103,21 @@ backend suite **255 pass, 1 skipped**; ruff/mypy clean. **Full report:
 
 Resolves exit criterion 3 (explicit controlled rebuild, new-before-old, no mixed
 vectors).
+
+### 6.c — Duplicate + coverage reports ✅ (2026-07-26)
+
+Delivered materialized `duplicate_groups`/`duplicate_members` (migration 0005,
+round-trip verified) + `build_duplicate_report` handler (full rebuild: exact groups
+= shared sha256; text groups = shared text_hash across ≥2 distinct sha256; members
+carry server-resolved display_path/location/state). API: `GET /duplicates`
+(paginated, `filter[kind]`), `GET /duplicates/{id}` (group + members),
+`GET /coverage` (per-location state counts), `POST /duplicates/rebuild` (durable,
+Idempotency-Key). Resolves open decisions #1 (materialize) and #4 (per-location
+coverage; cross-location missing-copy → Phase 7). 7 tests (2 handler PG+Qdrant,
+5 endpoint); full backend suite **262 pass, 1 skipped**; ruff/mypy clean. **Full
+report: `docs/architecture/phase-6c-duplicates.md`.**
+
+Resolves exit criterion 2 (duplicate groups show every active location/path).
 
 ---
 

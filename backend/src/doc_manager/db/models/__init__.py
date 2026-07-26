@@ -3,6 +3,7 @@
 from doc_manager.db.models.base import Base
 from doc_manager.db.models.catalog import CatalogEntry, ScanObservation
 from doc_manager.db.models.content import Chunk, ContentObject, FileVersion
+from doc_manager.db.models.duplicates import DuplicateGroup, DuplicateMember
 from doc_manager.db.models.jobs import (
     IdempotencyRecord,
     IngestionJob,
@@ -18,6 +19,8 @@ __all__ = [
     "CatalogEntry",
     "Chunk",
     "ContentObject",
+    "DuplicateGroup",
+    "DuplicateMember",
     "FileVersion",
     "IdempotencyRecord",
     "IngestionJob",

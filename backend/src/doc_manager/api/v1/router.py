@@ -16,6 +16,8 @@ from doc_manager.api.v1.routes.ask import providers_router
 from doc_manager.api.v1.routes.ask import router as ask_router
 from doc_manager.api.v1.routes.documents import errors_router
 from doc_manager.api.v1.routes.documents import router as documents_router
+from doc_manager.api.v1.routes.duplicates import coverage_router
+from doc_manager.api.v1.routes.duplicates import router as duplicates_router
 from doc_manager.api.v1.routes.jobs import router as jobs_router
 from doc_manager.api.v1.routes.locations import router as locations_router
 from doc_manager.api.v1.routes.maintenance import router as maintenance_router
@@ -27,6 +29,8 @@ router = APIRouter(prefix="/api/v1")
 router.include_router(locations_router)
 router.include_router(documents_router)
 router.include_router(errors_router)
+router.include_router(duplicates_router)
+router.include_router(coverage_router)
 router.include_router(search_router)
 router.include_router(ask_router)
 router.include_router(providers_router)

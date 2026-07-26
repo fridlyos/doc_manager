@@ -9,6 +9,8 @@ from doc_manager.core.display import display_path
 from doc_manager.db.models import (
     CatalogEntry,
     ContentObject,
+    DuplicateGroup,
+    DuplicateMember,
     FileVersion,
     IngestionJob,
     SourceLocation,
@@ -158,6 +160,31 @@ def serialize_ask_result(result: Any) -> dict[str, Any]:
     }
     if result.confirmation is not None:
         body["confirmation"] = result.confirmation
+    return body
+
+
+def serialize_duplicate_member(member: DuplicateMember) -> dict[str, Any]:
+    return {
+        "catalog_entry_id": str(member.catalog_entry_id),
+        "source_location_id": str(member.source_location_id),
+        "display_path": member.display_path,
+        "state": member.state,
+        "sha256": member.sha256,
+    }
+
+
+def serialize_duplicate_group(
+    group: DuplicateGroup, members: list[DuplicateMember] | None = None
+) -> dict[str, Any]:
+    body: dict[str, Any] = {
+        "id": str(group.id),
+        "kind": group.kind,
+        "group_hash": group.group_hash,
+        "member_count": group.member_count,
+        "built_at": iso_utc(group.built_at),
+    }
+    if members is not None:
+        body["members"] = [serialize_duplicate_member(m) for m in members]
     return body
 
 
