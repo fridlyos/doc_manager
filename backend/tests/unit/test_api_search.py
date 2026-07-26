@@ -43,6 +43,7 @@ class FakeRetrieval:
                 score=0.87,
                 page_start=4,
                 page_end=4,
+                text="the renewal clause covers december terms in full",
                 snippet="the renewal clause covers december",
                 availability="current",
                 paths=[

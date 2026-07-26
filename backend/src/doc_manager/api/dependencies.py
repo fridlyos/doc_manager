@@ -52,6 +52,32 @@ def get_retrieval_service(request: Request) -> Any:
     return service
 
 
+def get_provider_registry(request: Request) -> Any:
+    """The process-shared generation provider registry (Phase 5)."""
+    existing = getattr(request.app.state, "provider_registry", None)
+    if existing is not None:
+        return existing
+    from doc_manager.generation import build_registry
+
+    settings: Settings = request.app.state.settings
+    registry = build_registry(settings)
+    request.app.state.provider_registry = registry
+    return registry
+
+
+def get_ask_service(request: Request) -> Any:
+    """The process-shared Ask orchestrator. Tests may inject one on app.state."""
+    existing = getattr(request.app.state, "ask_service", None)
+    if existing is not None:
+        return existing
+    from doc_manager.generation.ask import AskService
+
+    settings: Settings = request.app.state.settings
+    service = AskService(get_retrieval_service(request), settings)
+    request.app.state.ask_service = service
+    return service
+
+
 def require_idempotency_key(request: Request) -> str:
     """Job-creating POSTs require Idempotency-Key (contract section 6.1)."""
     key = request.headers.get("Idempotency-Key")

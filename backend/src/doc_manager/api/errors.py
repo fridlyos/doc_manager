@@ -70,7 +70,8 @@ def request_id_of(request: Request) -> str:
     return rid if isinstance(rid, str) else str(uuid.uuid4())
 
 
-def problem_response(request: Request, exc: Problem) -> JSONResponse:
+def problem_body(request: Request, exc: Problem) -> dict[str, Any]:
+    """The Problem Details JSON object — shared by HTTP responses and SSE errors."""
     rid = request_id_of(request)
     body: dict[str, Any] = {
         "type": f"urn:doc-manager:problem:{exc.code}",
@@ -85,6 +86,12 @@ def problem_response(request: Request, exc: Problem) -> JSONResponse:
     if exc.errors:
         body["errors"] = exc.errors
     body.update(exc.extensions)
+    return body
+
+
+def problem_response(request: Request, exc: Problem) -> JSONResponse:
+    rid = request_id_of(request)
+    body = problem_body(request, exc)
     return JSONResponse(
         body,
         status_code=exc.status,

@@ -12,6 +12,8 @@ from typing import Any
 from fastapi import APIRouter
 
 from doc_manager import __version__
+from doc_manager.api.v1.routes.ask import providers_router
+from doc_manager.api.v1.routes.ask import router as ask_router
 from doc_manager.api.v1.routes.documents import errors_router
 from doc_manager.api.v1.routes.documents import router as documents_router
 from doc_manager.api.v1.routes.jobs import router as jobs_router
@@ -25,6 +27,8 @@ router.include_router(locations_router)
 router.include_router(documents_router)
 router.include_router(errors_router)
 router.include_router(search_router)
+router.include_router(ask_router)
+router.include_router(providers_router)
 router.include_router(jobs_router)
 
 

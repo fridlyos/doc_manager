@@ -68,12 +68,24 @@ class Settings(BaseSettings):
     external_max_evidence_tokens: int = 12_000
     external_max_output_tokens: int = 2_000
     external_request_timeout_seconds: int = 90
+    # Local generation: max tokens to generate and the overall per-request
+    # deadline. The external path uses external_* above.
+    generation_max_output_tokens: int = 1_200
+    generation_request_timeout_seconds: float = 120.0
+    # SSE keep-alive comment interval for Ask streaming (contract §8.3: ≥ every 15s).
+    sse_keepalive_seconds: float = 15.0
 
     ollama_url: str = "http://host.docker.internal:11434"
     ollama_chat_model: str = "llama3.1:8b"
+    # Context window (tokens) advertised for the local model; drives evidence
+    # budgeting and is passed to Ollama as options.num_ctx.
+    ollama_num_ctx: int = 8192
 
     openai_model: str | None = None
     openai_api_key_file: Path | None = None
+    # Context window advertised for the configured OpenAI model (drives evidence
+    # budgeting). Refine per model if needed.
+    openai_context_tokens: int = 128_000
 
     # --- Embeddings + artifacts ---
     embedding_model: str = "BAAI/bge-small-en-v1.5"
@@ -116,6 +128,11 @@ class Settings(BaseSettings):
     search_top_k: int = 12
     search_score_threshold: float | None = None
     store_query_history: bool = False
+    # RAG evidence selection (Phase 5.e): cap chunks per content object and the
+    # total evidence blocks; the token budget is derived from the provider's
+    # context window minus the output reservation at request time.
+    ask_max_chunks_per_content: int = 3
+    ask_max_evidence_blocks: int = 12
 
     @field_validator("database_url")
     @classmethod

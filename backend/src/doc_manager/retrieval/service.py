@@ -52,6 +52,9 @@ class SearchResult:
     score: float
     page_start: int | None
     page_end: int | None
+    #: The full chunk text (from the vector payload). Used as grounding evidence by
+    #: the Ask/RAG layer; the ``/search`` serializer exposes only ``snippet``.
+    text: str
     snippet: str
     availability: str
     paths: list[ResolvedPath] = field(default_factory=list)
@@ -111,6 +114,7 @@ class RetrievalService:
                     score=hit.score,
                     page_start=hit.page_start,
                     page_end=hit.page_end,
+                    text=hit.text,
                     snippet=_snippet(hit.text),
                     availability=_availability(paths),
                     paths=paths,

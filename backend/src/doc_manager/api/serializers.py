@@ -97,6 +97,70 @@ def serialize_location(location: SourceLocation) -> dict[str, Any]:
     }
 
 
+def serialize_citation(citation: Any) -> dict[str, Any]:
+    return {
+        "citation_id": citation.citation_id,
+        "ordinal": citation.ordinal,
+        "chunk_id": citation.chunk_id,
+        "page_start": citation.page_start,
+        "page_end": citation.page_end,
+        "snippet": citation.snippet,
+        "similarity_score": citation.similarity_score,
+        "availability": citation.availability,
+        "paths": [
+            {
+                "catalog_entry_id": path.catalog_entry_id,
+                "source_location_id": path.source_location_id,
+                "display_path": path.display_path,
+                "state": path.state,
+                "is_primary": path.is_primary,
+            }
+            for path in citation.paths
+        ],
+    }
+
+
+def serialize_ask_result(result: Any) -> dict[str, Any]:
+    """Project an ``AskResult`` into the contract §8.2 discriminated result."""
+    usage = None
+    if result.usage is not None and result.invoked:
+        usage = {
+            "input_tokens": result.usage.input_tokens,
+            "output_tokens": result.usage.output_tokens,
+            "total_tokens": result.usage.total_tokens,
+        }
+    body: dict[str, Any] = {
+        "id": result.id,
+        "status": result.status,
+        "answer": result.answer,
+        "answer_format": "markdown",
+        "provider": {
+            "provider_id": result.provider_id,
+            "model_id": result.model_id,
+            "data_boundary": result.data_boundary.classification,
+            "invoked": result.invoked,
+        },
+        "data_boundary": result.data_boundary.as_dict(),
+        "retrieval": {
+            "candidate_count": result.candidate_count,
+            "selected_evidence_count": result.selected_count,
+            "sufficient": result.sufficient,
+        },
+        "citations": [serialize_citation(c) for c in result.citations],
+        "finish_reason": result.finish_reason,
+        "usage": usage,
+        "timing": {
+            "retrieval_ms": result.retrieval_ms,
+            "generation_ms": result.generation_ms,
+            "total_ms": result.total_ms,
+        },
+        "warnings": list(result.warnings),
+    }
+    if result.confirmation is not None:
+        body["confirmation"] = result.confirmation
+    return body
+
+
 def serialize_search_result(result: SearchResult) -> dict[str, Any]:
     """Project a retrieval hit. ``similarity_score`` is comparable only within one
     embedding profile; paths are the current server-resolved display paths."""
