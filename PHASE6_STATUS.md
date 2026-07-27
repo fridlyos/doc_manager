@@ -16,7 +16,7 @@ this layer schedules, fans out, reconciles, and reports over existing jobs.
 | 6.a | Per-location schedules + manual file/location/all re-indexing | **✅ complete** |
 | 6.b | Profile-driven full re-index jobs (`reindex_all_for_profile`) | **✅ complete** |
 | 6.c | Exact-file and normalized-text duplicate reports | **✅ complete** |
-| 6.d | Reuse canonical content/vectors across exact/structure-equivalent paths; report text-equivalent-different-pagination without sharing chunks; delete/stale cleanup | ⬜ not started |
+| 6.d | Reuse canonical content/vectors across exact/structure-equivalent paths; report text-equivalent-different-pagination without sharing chunks; delete/stale cleanup | **✅ complete** |
 | 6.e | Duplicate and coverage UI | ⬜ not started |
 
 ## Exit criteria (whole phase)
@@ -118,6 +118,22 @@ coverage; cross-location missing-copy → Phase 7). 7 tests (2 handler PG+Qdrant
 report: `docs/architecture/phase-6c-duplicates.md`.**
 
 Resolves exit criterion 2 (duplicate groups show every active location/path).
+
+### 6.d — Reuse invariant + delete/restore convergence ✅ (2026-07-26)
+
+Formalized + tested the content/vector **reuse invariant** (structure-equivalent
+paths share one content object + chunks; text-equivalent-different-pagination get
+separate content objects with disjoint chunks) and closed the **delete half** of
+convergence. Extended `remove_stale_vectors` with `remove_orphan_content` (delete
+content objects unreferenced by any indexed entry → remove points + cascade chunk
+rows). The scanner now enqueues a deduped `remove_stale_vectors` when reconcile
+marks entries missing, so the store converges **after a scan**; restore
+(`missing → discovered → re-index`) rebuilds by hash. 3 tests (PG + Qdrant); full
+backend suite **265 pass, 1 skipped**; ruff/mypy clean. **Full report:
+`docs/architecture/phase-6d-reuse-cleanup.md`.**
+
+Completes exit criterion 1 (add/change/move/delete/restore converge after a scan).
+Only 6.e (UI) remains in Phase 6.
 
 ---
 
