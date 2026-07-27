@@ -17,7 +17,9 @@ this layer schedules, fans out, reconciles, and reports over existing jobs.
 | 6.b | Profile-driven full re-index jobs (`reindex_all_for_profile`) | **✅ complete** |
 | 6.c | Exact-file and normalized-text duplicate reports | **✅ complete** |
 | 6.d | Reuse canonical content/vectors across exact/structure-equivalent paths; report text-equivalent-different-pagination without sharing chunks; delete/stale cleanup | **✅ complete** |
-| 6.e | Duplicate and coverage UI | ⬜ not started |
+| 6.e | Duplicate and coverage UI | **✅ complete** |
+
+**Phase 6 is complete.** All deliverables and exit criteria are met.
 
 ## Exit criteria (whole phase)
 
@@ -134,6 +136,18 @@ backend suite **265 pass, 1 skipped**; ruff/mypy clean. **Full report:
 
 Completes exit criterion 1 (add/change/move/delete/restore converge after a scan).
 Only 6.e (UI) remains in Phase 6.
+
+### 6.e — Duplicates + coverage UI ✅ (2026-07-26)
+
+Delivered frontend `DuplicatesPage` (`/duplicates`, nav): kind filter chips,
+group table (kind badge, member count, hash), lazy expand → every member
+display_path + state, "Rebuild report" action. `CoveragePage` (`/coverage`, nav):
+per-location counts by state. `client.ts` `fetchDuplicates`/`fetchDuplicateGroup`/
+`fetchCoverage`/`rebuildDuplicates`. 3 Vitest tests; full frontend suite **22 pass**;
+eslint/tsc clean; build succeeds. **Full report:
+`docs/architecture/phase-6e-duplicates-ui.md`.**
+
+**Phase 6 complete** — all deliverables 6.a–6.e; all three exit criteria met.
 
 ---
 
