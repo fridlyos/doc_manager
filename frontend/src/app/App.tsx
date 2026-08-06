@@ -14,6 +14,7 @@ export function App() {
           <NavLink to="/documents">Documents</NavLink>
           <NavLink to="/duplicates">Duplicates</NavLink>
           <NavLink to="/coverage">Coverage</NavLink>
+          <NavLink to="/sync-plans">Sync Plans</NavLink>
           <NavLink to="/errors">Errors</NavLink>
           <NavLink to="/jobs">Jobs</NavLink>
         </nav>

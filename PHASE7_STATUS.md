@@ -15,7 +15,7 @@ PostgreSQL; no filesystem mutation exists anywhere in this feature.
 | --- | --- | --- |
 | 7.a | Pairwise location coverage reports | **✅ complete** |
 | 7.b | Relative-path / hash / text comparison rules | **✅ complete** |
-| 7.c | Persist + display dry-run sync plans and conflicts | ⬜ not started |
+| 7.c | Persist + display dry-run sync plans and conflicts | **✅ complete** |
 | 7.d | Document how a future separately-reviewed executor could consume a plan | ⬜ not started |
 
 ## Exit criteria (whole phase)
@@ -70,6 +70,23 @@ target pick (lowest relative path); coverage counts + `covered_percent`
 
 Coverage (7.a) and the comparison rules (7.b) are the same tested library; 7.c
 feeds it catalog rows and persists the result.
+
+### 7.c — Persisted dry-run sync plans ✅ (2026-08-06)
+
+Delivered `sync_plans`/`sync_plan_items` (migration 0006, round-trip verified;
+no execution columns), `build_sync_plan` handler (loads indexed snapshots → runs
+`compare_locations` → persists items + coverage summary → `ready`; catalog hashes
+only, opens no file), API `POST /sync-plans` (Idempotency-Key durable 202 +
+replay; 422 same source/target; 404 unknown) + `GET /sync-plans[/{id}[/items]]`
+(paginated, `filter[action]`), **no execute route**, and `SyncPlansPage` UI
+(create + list + expand items with conflict/copy highlight). Resolves open
+decision #1 (202 durable). Backend **285 pass, 1 skipped** (9 new incl. the
+no-write source-root E2E); frontend **24 pass** (2 new); migration 0006
+round-trips; ruff/mypy/eslint/tsc clean; build succeeds. **Full report:
+`docs/architecture/phase-7c-sync-plans.md`.**
+
+Completes exit criterion 1 (identify matching/missing/renamed/conflicting) and
+criterion 2 (E2E proves no writes to source roots). Only 7.d (executor ADR) remains.
 
 ---
 

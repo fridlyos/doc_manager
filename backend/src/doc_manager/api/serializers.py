@@ -14,6 +14,8 @@ from doc_manager.db.models import (
     FileVersion,
     IngestionJob,
     SourceLocation,
+    SyncPlan,
+    SyncPlanItem,
 )
 from doc_manager.domain.enums import ErrorClass
 from doc_manager.retrieval import SearchResult
@@ -186,6 +188,33 @@ def serialize_duplicate_group(
     if members is not None:
         body["members"] = [serialize_duplicate_member(m) for m in members]
     return body
+
+
+def serialize_sync_plan(plan: SyncPlan) -> dict[str, Any]:
+    return {
+        "id": str(plan.id),
+        "source_location_id": str(plan.source_location_id),
+        "target_location_id": str(plan.target_location_id),
+        "status": plan.status,
+        "item_count": plan.item_count,
+        "covered_percent": plan.covered_percent,
+        "summary": plan.summary_json,
+        "error_code": plan.error_code,
+        "built_at": iso_utc(plan.built_at),
+        "created_at": iso_utc(plan.created_at),
+    }
+
+
+def serialize_sync_plan_item(item: SyncPlanItem) -> dict[str, Any]:
+    return {
+        "id": str(item.id),
+        "action": item.action,
+        "reason": item.reason,
+        "source_relative_path": item.source_relative_path,
+        "source_sha256": item.source_sha256,
+        "target_relative_path": item.target_relative_path,
+        "target_sha256": item.target_sha256,
+    }
 
 
 def serialize_search_result(result: SearchResult) -> dict[str, Any]:

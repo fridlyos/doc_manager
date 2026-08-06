@@ -278,6 +278,68 @@ export async function search(body: SearchRequest): Promise<SearchResponse> {
   return result.data;
 }
 
+// --- Sync plans (Phase 7.c/7.e) --------------------------------------------
+
+export type SyncAction = "already_present" | "copy" | "conflict" | "manual_review";
+
+export interface SyncPlan {
+  id: string;
+  source_location_id: string;
+  target_location_id: string;
+  status: "building" | "ready" | "failed";
+  item_count: number;
+  covered_percent: number;
+  summary: Record<string, number> | null;
+  error_code: string | null;
+  built_at: string | null;
+  created_at: string;
+}
+
+export interface SyncPlanItem {
+  id: string;
+  action: SyncAction;
+  reason: string;
+  source_relative_path: string;
+  source_sha256: string;
+  target_relative_path: string | null;
+  target_sha256: string | null;
+}
+
+export async function fetchSyncPlans(): Promise<Collection<SyncPlan>> {
+  return apiFetch("/api/v1/sync-plans");
+}
+
+export async function fetchSyncPlan(id: string): Promise<SyncPlan> {
+  const result = await apiFetch<Resource<SyncPlan>>(`/api/v1/sync-plans/${id}`);
+  return result.data;
+}
+
+export async function fetchSyncPlanItems(
+  id: string,
+  action?: SyncAction,
+): Promise<Collection<SyncPlanItem>> {
+  const query = action ? `?filter[action]=${action}` : "";
+  return apiFetch(`/api/v1/sync-plans/${id}/items${query}`);
+}
+
+export async function createSyncPlan(
+  sourceLocationId: string,
+  targetLocationId: string,
+): Promise<SyncPlan> {
+  const result = await apiFetch<Resource<SyncPlan>>("/api/v1/sync-plans", {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+      "Idempotency-Key": crypto.randomUUID().replaceAll("-", ""),
+    },
+    body: JSON.stringify({
+      source_location_id: sourceLocationId,
+      target_location_id: targetLocationId,
+    }),
+  });
+  return result.data;
+}
+
 // --- Ask (RAG generation) ---------------------------------------------------
 
 export type DataBoundary = "local" | "external";
