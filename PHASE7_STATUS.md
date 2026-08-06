@@ -13,8 +13,8 @@ PostgreSQL; no filesystem mutation exists anywhere in this feature.
 
 | # | Deliverable | Status |
 | --- | --- | --- |
-| 7.a | Pairwise location coverage reports | ⬜ not started |
-| 7.b | Relative-path / hash / text comparison rules | ⬜ not started |
+| 7.a | Pairwise location coverage reports | **✅ complete** |
+| 7.b | Relative-path / hash / text comparison rules | **✅ complete** |
 | 7.c | Persist + display dry-run sync plans and conflicts | ⬜ not started |
 | 7.d | Document how a future separately-reviewed executor could consume a plan | ⬜ not started |
 
@@ -51,6 +51,25 @@ PostgreSQL; no filesystem mutation exists anywhere in this feature.
 - Data model (§6): `sync_plans` (compared source/target, status) + `sync_plan_items`
   (action `copy | conflict | already_present | manual_review`, source/target
   relative paths, hashes, reason, timestamps; **no execution columns**).
+
+---
+
+## Completed work
+
+### 7.a / 7.b — Location comparison + pairwise coverage ✅ (2026-08-06)
+
+Delivered pure `doc_manager/sync/compare.py`: `compare_locations(source, target)`
+→ `ComparisonResult` (classified `SyncItem`s + `CoverageSummary`). Rules with
+precedence path→hash→text→missing: `already_present` (exact), `conflict`
+(same path, diff sha256), `manual_review` (`renamed` = same sha256 other path;
+`text_equivalent` = same text_hash, diff bytes), `copy` (missing). Deterministic
+target pick (lowest relative path); coverage counts + `covered_percent`
+(0.0 on empty source). Directional (source authoritative). No DB/FS/execution.
+11 unit tests; full backend suite **276 pass, 1 skipped**; ruff/mypy clean.
+**Full report: `docs/architecture/phase-7a-comparison.md`.**
+
+Coverage (7.a) and the comparison rules (7.b) are the same tested library; 7.c
+feeds it catalog rows and persists the result.
 
 ---
 
