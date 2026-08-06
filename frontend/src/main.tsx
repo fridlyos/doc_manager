@@ -10,6 +10,8 @@ import { DocumentsPage } from "./pages/DocumentsPage";
 import { ErrorsPage } from "./pages/ErrorsPage";
 import { SearchPage } from "./pages/SearchPage";
 import { AskPage } from "./pages/AskPage";
+import { DuplicatesPage } from "./pages/DuplicatesPage";
+import { CoveragePage } from "./pages/CoveragePage";
 import "./styles/global.css";
 
 const queryClient = new QueryClient();
@@ -24,6 +26,8 @@ const router = createBrowserRouter([
       { path: "ask", element: <AskPage /> },
       { path: "search", element: <SearchPage /> },
       { path: "documents", element: <DocumentsPage /> },
+      { path: "duplicates", element: <DuplicatesPage /> },
+      { path: "coverage", element: <CoveragePage /> },
       { path: "errors", element: <ErrorsPage /> },
       { path: "jobs", element: <JobsPage /> },
     ],

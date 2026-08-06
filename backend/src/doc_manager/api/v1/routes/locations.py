@@ -604,3 +604,50 @@ async def request_scan(
         idempotency_replayed=replayed,
         coalesced=coalesced,
     )
+
+
+@router.post("/{location_id}/reindex", status_code=202)
+async def request_location_reindex(
+    request: Request,
+    response: Response,
+    location_id: str,
+    session: Annotated[AsyncSession, Depends(get_session)],
+    settings: Annotated[Settings, Depends(get_settings_dep)],
+    idempotency_key: Annotated[str, Depends(require_idempotency_key)],
+) -> dict[str, Any]:
+    """Re-index every eligible document in this location (durable fan-out job)."""
+    engine = JobEngine(
+        base_delay_seconds=settings.job_retry_base_delay_seconds,
+        max_delay_seconds=settings.job_retry_max_delay_seconds,
+    )
+    fingerprint = request_fingerprint({"location_id": location_id, "scope": "location"}, None)
+    location = await _load_location(session, location_id)
+    outcome = await reserve_idempotency(
+        session,
+        method="POST",
+        route_template="/api/v1/locations/{location_id}/reindex",
+        key=idempotency_key,
+        fingerprint=fingerprint,
+    )
+    if outcome.replayed_job is not None:
+        job, coalesced, replayed = outcome.replayed_job, False, True
+    else:
+        job, coalesced = await engine.enqueue(
+            session,
+            job_type=JobType.reindex_all_for_profile,
+            payload={"version": 1, "scope": "location", "source_location_id": str(location.id)},
+            origin=JobOrigin.api,
+            source_location_id=location.id,
+            max_attempts=settings.job_max_attempts,
+            request_key=idempotency_key,
+            actor="api",
+        )
+        replayed = False
+        assert outcome.record is not None
+        outcome.record.job_id = job.id
+    await session.commit()
+    response.headers["Location"] = f"/api/v1/jobs/{job.id}"
+    response.headers["Retry-After"] = "2"
+    if replayed:
+        response.headers["Idempotency-Replayed"] = "true"
+    return envelope(request, serialize_job(job), idempotency_replayed=replayed, coalesced=coalesced)

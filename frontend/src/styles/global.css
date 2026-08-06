@@ -443,3 +443,26 @@ code {
   margin: 0.4rem 0 0;
   color: var(--muted);
 }
+
+.dup-exact {
+  color: var(--down);
+  border: 1px solid var(--down);
+}
+.dup-text {
+  color: #d29922;
+  border: 1px solid #d29922;
+}
+
+.dup-members {
+  list-style: none;
+  padding: 0;
+  margin: 0;
+  display: grid;
+  gap: 0.35rem;
+}
+.dup-members li {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  flex-wrap: wrap;
+}

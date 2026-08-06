@@ -272,6 +272,18 @@ async def handle_scan_location(ctx: JobContext) -> None:
 
     counts = await _apply_reconciliation(session, location, job)
     enqueued = await _enqueue_indexing(ctx, location)
+    if counts.get("missing"):
+        # Deletions detected: retire their now-orphaned vectors so the store
+        # converges after the scan (Phase 6.d). Deduped across scans.
+        await ctx.engine.enqueue(
+            ctx.session,
+            job_type=JobType.remove_stale_vectors,
+            payload={"version": 1},
+            origin=JobOrigin.handler,
+            dedupe_key="remove_stale_vectors",
+            max_attempts=get_settings().job_max_attempts,
+            actor="scan",
+        )
     now = await db_now(session)
     location.last_successful_scan_at = now
     if location.sentinel_id is None and check.observed_sentinel is not None:

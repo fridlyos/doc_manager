@@ -359,6 +359,57 @@ function parseSseFrame(raw: string): AskStreamEvent | null {
 // Streams the Ask SSE response, invoking `onEvent` per normalized event. Consumes
 // the response body with fetch + a ReadableStream reader (browser EventSource
 // cannot POST the required JSON body).
+// --- Duplicates + coverage (Phase 6.c/6.e) ---------------------------------
+
+export interface DuplicateMemberInfo {
+  catalog_entry_id: string;
+  source_location_id: string;
+  display_path: string;
+  state: string;
+  sha256: string;
+}
+
+export interface DuplicateGroupInfo {
+  id: string;
+  kind: "exact" | "text";
+  group_hash: string;
+  member_count: number;
+  built_at: string | null;
+  members?: DuplicateMemberInfo[];
+}
+
+export interface CoverageEntry {
+  source_location_id: string;
+  name: string;
+  total: number;
+  by_state: Record<string, number>;
+}
+
+export async function fetchDuplicates(
+  kind?: "exact" | "text",
+): Promise<Collection<DuplicateGroupInfo>> {
+  const query = kind ? `?filter[kind]=${kind}` : "";
+  return apiFetch(`/api/v1/duplicates${query}`);
+}
+
+export async function fetchDuplicateGroup(id: string): Promise<DuplicateGroupInfo> {
+  const result = await apiFetch<Resource<DuplicateGroupInfo>>(`/api/v1/duplicates/${id}`);
+  return result.data;
+}
+
+export async function fetchCoverage(): Promise<CoverageEntry[]> {
+  const result = await apiFetch<Resource<CoverageEntry[]>>("/api/v1/coverage");
+  return result.data;
+}
+
+export async function rebuildDuplicates(): Promise<Job> {
+  const result = await apiFetch<Resource<Job>>("/api/v1/duplicates/rebuild", {
+    method: "POST",
+    headers: { "Idempotency-Key": crypto.randomUUID().replaceAll("-", "") },
+  });
+  return result.data;
+}
+
 export async function askStream(
   body: AskRequestBody,
   onEvent: (event: AskStreamEvent) => void,

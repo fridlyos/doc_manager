@@ -110,6 +110,15 @@ class QdrantRepository:
             points_selector=models.FilterSelector(filter=_content_filter([str(content_object_id)])),
         )
 
+    async def list_collection_names(self) -> list[str]:
+        """All collection names known to this Qdrant instance."""
+        response = await self._client.get_collections()
+        return [c.name for c in response.collections]
+
+    async def drop_collection(self, name: str) -> None:
+        """Delete a whole collection (used to retire a superseded embedding profile)."""
+        await self._client.delete_collection(name)
+
     async def search(
         self,
         vector: Sequence[float],

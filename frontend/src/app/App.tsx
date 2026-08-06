@@ -12,6 +12,8 @@ export function App() {
           <NavLink to="/ask">Ask</NavLink>
           <NavLink to="/search">Search</NavLink>
           <NavLink to="/documents">Documents</NavLink>
+          <NavLink to="/duplicates">Duplicates</NavLink>
+          <NavLink to="/coverage">Coverage</NavLink>
           <NavLink to="/errors">Errors</NavLink>
           <NavLink to="/jobs">Jobs</NavLink>
         </nav>
