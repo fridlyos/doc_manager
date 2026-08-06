@@ -16,7 +16,9 @@ PostgreSQL; no filesystem mutation exists anywhere in this feature.
 | 7.a | Pairwise location coverage reports | **✅ complete** |
 | 7.b | Relative-path / hash / text comparison rules | **✅ complete** |
 | 7.c | Persist + display dry-run sync plans and conflicts | **✅ complete** |
-| 7.d | Document how a future separately-reviewed executor could consume a plan | ⬜ not started |
+| 7.d | Document how a future separately-reviewed executor could consume a plan | **✅ complete** |
+
+**Phase 7 is complete.** All deliverables and exit criteria are met.
 
 ## Exit criteria (whole phase)
 
@@ -87,6 +89,19 @@ round-trips; ruff/mypy/eslint/tsc clean; build succeeds. **Full report:
 
 Completes exit criterion 1 (identify matching/missing/renamed/conflicting) and
 criterion 2 (E2E proves no writes to source roots). Only 7.d (executor ADR) remains.
+
+### 7.d — Future-executor boundary ADR ✅ (2026-08-06)
+
+Delivered `docs/adr/0006-sync-executor-boundary.md` (indexed in `docs/adr/README.md`):
+records that **no sync execution ships in the MVP** — planning is comparison +
+immutable dry-run plans only — and pins the properties any future, separately
+reviewed executor MUST satisfy (disabled by default; allowlisted target roots only;
+explicit per-operation confirmation; conflict rules, never auto-overwrite; no
+automatic delete; checksum-after-copy; audit trail; execution-time re-validation;
+its own security review). Notes the MVP's structural guarantees (build opens no
+file; no execute route; no execution columns). Docs-only.
+
+**Phase 7 complete** — all deliverables 7.a–7.d; both exit criteria met.
 
 ---
 
