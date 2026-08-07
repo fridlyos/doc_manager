@@ -15,7 +15,7 @@ document** over the features built in Phases 1–7 — little new product surfac
 
 | # | Deliverable | Status |
 | --- | --- | --- |
-| 8.a | Resource limits, graceful shutdown, stale-lease recovery, cleanup grace periods | ⬜ not started |
+| 8.a | Resource limits, graceful shutdown, stale-lease recovery, cleanup grace periods | **✅ complete** |
 | 8.b | Threat-model review — filesystem access + prompt injection | ⬜ not started |
 | 8.c | Coordinated PG dump + Qdrant snapshot + artifact inventory + checksums + atomic completion + retention (backup maintenance profile) | ⬜ not started |
 | 8.d | Backup/restore, optional PostgreSQL PITR, upgrade/migration, model-setup, troubleshooting guides | ⬜ not started |
@@ -71,6 +71,23 @@ document** over the features built in Phases 1–7 — little new product surfac
 - **Security (§12):** secrets only via Docker secrets into the API service; never to
   browser/worker/DB/logs/backups; no arbitrary user-path reads; treat document text
   as untrusted; external egress only after policy gates.
+
+---
+
+## Completed work
+
+### 8.a — Runtime hardening ✅ (2026-08-06)
+
+Delivered: `compose.yaml` `deploy.resources.limits` (cpus+memory, `.env`-tunable)
+on postgres/qdrant/api/worker (worker 4c/4g for the embedding model). Verified
+**graceful shutdown** (`release_for_shutdown` → `retry_wait`, attempt retained; new
+test: shutdown re-queues, a second worker reclaims + runs). Stale-lease reaper
+already tested (no change). New `JobEngine.gc_stale_rows` (worker `_maintenance_loop`,
+`maintenance_interval_seconds`/`maintenance_retention_hours`) GCs abandoned
+`scan_observations` (terminal job, aged) + expired `idempotency_records` (aged, job
+terminal/absent); never touches open work. 3 integration tests; full backend suite
+**288 pass, 1 skipped**; ruff/mypy clean; compose validates. **Full report:
+`docs/architecture/phase-8a-runtime-hardening.md`.**
 
 ---
 

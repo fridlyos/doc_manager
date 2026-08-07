@@ -15,6 +15,12 @@ name: doc-manager
 services:
   postgres:
     image: postgres:16
+    # Resource limits (Phase 8.a). Honored by `docker compose` v2; tune via .env.
+    deploy:
+      resources:
+        limits:
+          cpus: "${DOCMAN_POSTGRES_CPUS:-2}"
+          memory: ${DOCMAN_POSTGRES_MEM:-2g}
     environment:
       POSTGRES_USER: ${DOCMAN_POSTGRES_USER:-docman}
       POSTGRES_PASSWORD: ${DOCMAN_POSTGRES_PASSWORD:-docman}
@@ -34,6 +40,11 @@ services:
 
   qdrant:
     image: qdrant/qdrant:v1.12.4
+    deploy:
+      resources:
+        limits:
+          cpus: "${DOCMAN_QDRANT_CPUS:-2}"
+          memory: ${DOCMAN_QDRANT_MEM:-2g}
     volumes:
       - qdrant_data:/qdrant/storage
     healthcheck:
@@ -49,6 +60,11 @@ services:
     build:
       context: .
       dockerfile: deploy/api.Dockerfile
+    deploy:
+      resources:
+        limits:
+          cpus: "${DOCMAN_API_CPUS:-2}"
+          memory: ${DOCMAN_API_MEM:-1g}
     env_file:
       - .env
     environment:
@@ -97,6 +113,12 @@ services:
     build:
       context: .
       dockerfile: deploy/worker.Dockerfile
+    # The worker loads the FastEmbed model; give it the most memory headroom.
+    deploy:
+      resources:
+        limits:
+          cpus: "${DOCMAN_WORKER_CPUS:-4}"
+          memory: ${DOCMAN_WORKER_MEM:-4g}
     env_file:
       - .env
     environment:
