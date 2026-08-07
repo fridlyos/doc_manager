@@ -16,7 +16,7 @@ document** over the features built in Phases 1–7 — little new product surfac
 | # | Deliverable | Status |
 | --- | --- | --- |
 | 8.a | Resource limits, graceful shutdown, stale-lease recovery, cleanup grace periods | **✅ complete** |
-| 8.b | Threat-model review — filesystem access + prompt injection | ⬜ not started |
+| 8.b | Threat-model review — filesystem access + prompt injection | **✅ complete** |
 | 8.c | Coordinated PG dump + Qdrant snapshot + artifact inventory + checksums + atomic completion + retention (backup maintenance profile) | ⬜ not started |
 | 8.d | Backup/restore, optional PostgreSQL PITR, upgrade/migration, model-setup, troubleshooting guides | ⬜ not started |
 | 8.e | Provider enablement, key rotation, external-data review, rate-limit/cost-control, incident-disable procedures | ⬜ not started |
@@ -88,6 +88,19 @@ already tested (no change). New `JobEngine.gc_stale_rows` (worker `_maintenance_
 terminal/absent); never touches open work. 3 integration tests; full backend suite
 **288 pass, 1 skipped**; ruff/mypy clean; compose validates. **Full report:
 `docs/architecture/phase-8a-runtime-hardening.md`.**
+
+### 8.b — Threat-model review (filesystem + prompt injection) ✅ (2026-08-06)
+
+Delivered `docs/security/threat-model.md`: assets + trust boundaries, then filesystem
+threats (T-FS-1 arbitrary read → allowlist/no path-read endpoints; T-FS-2 symlink
+escape → never-follow-symlinks; T-FS-3 source mutation → read-only + derived stores +
+no-exec sync; T-FS-4 host-path disclosure → display_path only, scan_root only on the
+operator's own location resource; T-FS-5 mapped-drive swap → sentinel identity) and
+prompt-injection threats (T-PI-1 instruction hijack → untrusted-evidence framing;
+T-PI-2 fabricated citation → server-owned citations + drop invented aliases; T-PI-3
+tool execution → no tools exposed; T-PI-4 evidence exfil → external policy +
+zero-metadata boundary). Each threat maps control (with code ref) → residual risk →
+test; a traceability table links to the Phase 8.f tests. Docs-only.
 
 ---
 
