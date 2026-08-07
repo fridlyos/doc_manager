@@ -1,19 +1,14 @@
 #!/usr/bin/env bash
-# Verify a completed backup set's integrity — PHASE 1 SKELETON.
-# Checks presence of a completion marker + manifest; full checksum verification
-# and a restore-into-throwaway-volumes drill land in Phase 8.
+# Verify a completed backup set's integrity (TECHSTACK 11.5, Phase 8.c).
+#
+# Thin wrapper around `python -m doc_manager.backup verify <id>`, which requires
+# the COMPLETED marker and recomputes the SHA-256 of every file in the manifest's
+# SHA256SUMS. Exit 0 only when the whole set verifies.
+#
+#   docker compose --profile maintenance run --rm backup /scripts/verify-backup.sh <backup-id>
 set -euo pipefail
 
 backup_id="${1:-}"
-BACKUPS="${DOCMAN_BACKUP_ROOT:-/backups}"
-[[ -n "$backup_id" ]] || { echo "usage: verify-backup.sh <backup-id>"; exit 2; }
+[[ -n "$backup_id" ]] || { echo "usage: verify-backup.sh <backup-id>" >&2; exit 2; }
 
-set_dir="$BACKUPS/completed/$backup_id"
-[[ -d "$set_dir" ]] || { echo "[FAIL] no completed set: $set_dir"; exit 1; }
-
-status=0
-[[ -f "$set_dir/COMPLETED" ]] && echo "[ ok ] completion marker" || { echo "[FAIL] missing completion marker"; status=1; }
-[[ -f "$set_dir/manifest.json" ]] && echo "[ ok ] manifest present" || { echo "[FAIL] missing manifest"; status=1; }
-
-echo "[TODO Phase 8] verify SHA-256 checksums of every artifact"
-exit "$status"
+exec python -m doc_manager.backup verify "$backup_id"

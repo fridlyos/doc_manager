@@ -17,7 +17,7 @@ document** over the features built in Phases 1–7 — little new product surfac
 | --- | --- | --- |
 | 8.a | Resource limits, graceful shutdown, stale-lease recovery, cleanup grace periods | **✅ complete** |
 | 8.b | Threat-model review — filesystem access + prompt injection | **✅ complete** |
-| 8.c | Coordinated PG dump + Qdrant snapshot + artifact inventory + checksums + atomic completion + retention (backup maintenance profile) | ⬜ not started |
+| 8.c | Coordinated PG dump + Qdrant snapshot + artifact inventory + checksums + atomic completion + retention (backup maintenance profile) | **✅ complete** |
 | 8.d | Backup/restore, optional PostgreSQL PITR, upgrade/migration, model-setup, troubleshooting guides | ⬜ not started |
 | 8.e | Provider enablement, key rotation, external-data review, rate-limit/cost-control, incident-disable procedures | ⬜ not started |
 | 8.f | Threat-model tests — secret leakage, accidental egress, prompt injection, path/metadata disclosure | ⬜ not started |
@@ -101,6 +101,26 @@ T-PI-2 fabricated citation → server-owned citations + drop invented aliases; T
 tool execution → no tools exposed; T-PI-4 evidence exfil → external policy +
 zero-metadata boundary). Each threat maps control (with code ref) → residual risk →
 test; a traceability table links to the Phase 8.f tests. Docs-only.
+
+### 8.c — Coordinated backup maintenance profile ✅ (2026-08-06)
+
+Delivered `backend/src/doc_manager/backup/` — a testable orchestrator. `run_backup`
+builds a set in local **staging** (`pg_dump --format=custom`, `pg_dumpall
+--globals-only`, optional Qdrant snapshot + collection/profile mapping, checksummed
+artifact inventory), writes `manifest.json` + `SHA256SUMS`, **verifies**, then
+publishes atomically: `copytree → completed/<id>.partial → verify → rename → write
+COMPLETED marker LAST`, then prunes per GFS (`retention.py`: 14 daily / 8 weekly /
+12 monthly). External captures are injected (`BackupSteps` Protocol; `DefaultSteps`
+for real, fakes in tests) so the discipline is unit-tested without live services —
+an interrupted run and a staged-verify failure both leave **no** completed set. No
+secrets enter the manifest (non-secret config checksum only); the artifact store is
+read **read-only**; no source root is written. New `deploy/backup.Dockerfile`
+(worker image + PGDG **postgresql-client-16**); `compose.yaml` `backup` service now
+uses it, mounts the artifact volume read-only, and drops the `sleep infinity`
+entrypoint so a passed script runs. `scripts/backup.sh` / `verify-backup.sh` are now
+thin wrappers over `python -m doc_manager.backup {run,verify}`. 13 unit tests; full
+backend suite **301 pass, 1 skipped**; ruff/format/mypy clean. **Full report:
+`docs/architecture/phase-8c-backup.md`.**
 
 ---
 
