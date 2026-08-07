@@ -13,6 +13,7 @@ from doc_manager.db.models.jobs import (
     SchedulerState,
 )
 from doc_manager.db.models.locations import SourceLocation
+from doc_manager.db.models.sync import SyncPlan, SyncPlanItem
 
 __all__ = [
     "Base",
@@ -30,4 +31,6 @@ __all__ = [
     "ScanObservation",
     "SchedulerState",
     "SourceLocation",
+    "SyncPlan",
+    "SyncPlanItem",
 ]

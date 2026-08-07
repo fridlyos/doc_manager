@@ -12,6 +12,7 @@ import { SearchPage } from "./pages/SearchPage";
 import { AskPage } from "./pages/AskPage";
 import { DuplicatesPage } from "./pages/DuplicatesPage";
 import { CoveragePage } from "./pages/CoveragePage";
+import { SyncPlansPage } from "./pages/SyncPlansPage";
 import "./styles/global.css";
 
 const queryClient = new QueryClient();
@@ -28,6 +29,7 @@ const router = createBrowserRouter([
       { path: "documents", element: <DocumentsPage /> },
       { path: "duplicates", element: <DuplicatesPage /> },
       { path: "coverage", element: <CoveragePage /> },
+      { path: "sync-plans", element: <SyncPlansPage /> },
       { path: "errors", element: <ErrorsPage /> },
       { path: "jobs", element: <JobsPage /> },
     ],

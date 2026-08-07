@@ -466,3 +466,37 @@ code {
   gap: 0.5rem;
   flex-wrap: wrap;
 }
+
+.sync-items {
+  list-style: none;
+  padding: 0;
+  margin: 0;
+  display: grid;
+  gap: 0.35rem;
+}
+.sync-item {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  flex-wrap: wrap;
+  padding: 0.3rem 0.5rem;
+  border-radius: 0.3rem;
+}
+.sync-item.action-conflict {
+  background: rgb(248 81 73 / 12%);
+}
+.sync-item.action-copy {
+  background: rgb(210 153 34 / 12%);
+}
+.sync-arrow {
+  color: var(--muted);
+}
+.status-building {
+  color: #d29922;
+}
+.status-ready {
+  color: var(--up);
+}
+.status-failed {
+  color: var(--down);
+}

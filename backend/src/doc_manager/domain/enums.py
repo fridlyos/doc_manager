@@ -89,6 +89,12 @@ class ExternalGenerationPolicy(StrEnum):
     allow = "allow"
 
 
+class SyncPlanStatus(StrEnum):
+    building = "building"
+    ready = "ready"
+    failed = "failed"
+
+
 class PathStyle(StrEnum):
     linux = "linux"
     windows = "windows"

@@ -10,6 +10,7 @@ from doc_manager.jobs.handlers.duplicates import handle_build_duplicate_report
 from doc_manager.jobs.handlers.index_file import handle_index_file
 from doc_manager.jobs.handlers.reindex import handle_reindex_bulk
 from doc_manager.jobs.handlers.scan_location import handle_scan_location
+from doc_manager.jobs.handlers.sync_plan import handle_build_sync_plan
 
 Handler = Callable[[JobContext], Awaitable[None]]
 
@@ -20,4 +21,5 @@ HANDLERS: dict[JobType, Handler] = {
     JobType.reindex_all_for_profile: handle_reindex_bulk,
     JobType.remove_stale_vectors: handle_remove_stale_vectors,
     JobType.build_duplicate_report: handle_build_duplicate_report,
+    JobType.build_sync_plan: handle_build_sync_plan,
 }

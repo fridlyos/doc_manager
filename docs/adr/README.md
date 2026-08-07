@@ -20,6 +20,7 @@ Phase 1 must not begin until the Phase 0 ADR set is accepted or explicitly amend
 | [0003](0003-content-addressed-extracted-text.md) | Store extracted text as content-addressed compressed artifacts | Proposed |
 | [0004](0004-pluggable-generation-provider-boundary.md) | Use a pluggable generation-provider privacy boundary | Proposed |
 | [0005](0005-windows-docker-desktop-nas-storage.md) | Use Windows Docker Desktop with local database volumes and NAS file mounts | Proposed |
+| [0006](0006-sync-executor-boundary.md) | Keep sync execution out of the MVP behind a separately-reviewed executor boundary | Proposed |
 
 ## Creating later ADRs
 
