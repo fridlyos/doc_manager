@@ -228,14 +228,22 @@ counters are zero on a real external attempt.
 
 ## 5. Control → test traceability (summary)
 
+8.f tests live in `backend/tests/unit/test_threat_model.py` (15 offline tests,
+each named for the threat it guards); endpoint-level controls stay covered by the
+integration suite and the provider/browse/sync tests named below.
+
 | Threat | Primary control | Test |
 | --- | --- | --- |
-| T-FS-1 arbitrary read | allowlist + no path-read endpoints | browse tests, 8.f |
-| T-FS-2 symlink escape | never follow symlinks | 8.f |
-| T-FS-3 source mutation | read-only, derived stores, no exec | sync no-write E2E, 8.f |
-| T-FS-4 path disclosure | display_path only | 8.f |
+| T-FS-1 arbitrary read | allowlist + no path-read endpoints | `test_locations_browse` |
+| T-FS-2 symlink escape | never follow symlinks | `test_locations_browse`, scan handler |
+| T-FS-3 source mutation | read-only, derived stores, no exec | `test_sync_plan` no-write E2E |
+| T-FS-4 path disclosure | display_path only | `test_threat_model` (serializer + scan_root guards) |
 | T-FS-5 mapped-drive swap | sentinel identity | scan sentinel tests |
-| T-PI-1 instruction hijack | untrusted-evidence framing | 8.f |
-| T-PI-2 fabricated citation | server-owned citations | test_rag, 5.h |
-| T-PI-3 tool execution | no tools exposed | test_openai_provider, 8.f |
-| T-PI-4 evidence exfil | external policy + zero-metadata boundary | 8.f |
+| T-PI-1 instruction hijack | untrusted-evidence framing | `test_threat_model` (grounding frame) |
+| T-PI-2 fabricated citation | server-owned citations | `test_threat_model`, `test_rag`, 5.h |
+| T-PI-3 tool execution | no tools exposed | `test_openai_provider` |
+| T-PI-4 evidence exfil | external policy + zero-metadata boundary | `test_threat_model`, `test_external_policy` |
+
+Secret leakage (the OpenAI key never reaching logs, a backup manifest, or an API
+surface; `read_openai_api_key` the only reader) is guarded by the secret-leakage
+group in `test_threat_model`.

@@ -20,7 +20,7 @@ document** over the features built in Phases 1–7 — little new product surfac
 | 8.c | Coordinated PG dump + Qdrant snapshot + artifact inventory + checksums + atomic completion + retention (backup maintenance profile) | **✅ complete** |
 | 8.d | Backup/restore, optional PostgreSQL PITR, upgrade/migration, model-setup, troubleshooting guides | **✅ complete** |
 | 8.e | Provider enablement, key rotation, external-data review, rate-limit/cost-control, incident-disable procedures | ⬜ not started |
-| 8.f | Threat-model tests — secret leakage, accidental egress, prompt injection, path/metadata disclosure | ⬜ not started |
+| 8.f | Threat-model tests — secret leakage, accidental egress, prompt injection, path/metadata disclosure | **✅ complete** |
 | 8.g | Connect completed-backup directory to NAS external-backup workflow without exposing live volume internals | ⬜ not started |
 | 8.h | Performance measurements on a representative local corpus | ⬜ not started |
 | 8.i | Accessibility + browser workflow review | ⬜ not started |
@@ -144,6 +144,38 @@ re-download on container recreate, pre-warm + override guidance), and
 mapped-drive + `unavailable` locations, model/generation, backup/restore,
 jobs/reaper/GC). All cross-linked; env-var names verified against
 `core/config.py` (`DOCMAN_` prefix). Docs-only — no code, tests, or gates touched.
+
+### 8.f — Threat-model tests ✅ (2026-10-03)
+
+New `backend/tests/unit/test_threat_model.py` — **15 offline tests**, each named
+for the threat it guards, making the 8.b controls executable:
+
+- **Secret leakage:** `read_openai_api_key` is file-only (unset/missing → `None`,
+  present → stripped) and the **only** `openai_api_key*` reader on `Settings`; the
+  log redactor scrubs the key value and the content keys; the backup manifest's
+  `_config_snapshot` holds only the four non-secret indexing keys — the secret
+  never appears.
+- **Accidental egress (T-PI-4):** `evaluate_external_policy` fails closed when
+  external is disabled (even acknowledged) and when any one source denies; the
+  deny reason carries no source name; the boundary's metadata counters
+  (`paths/file_names/tags/catalog_ids/original_files_sent`) are **structurally
+  zero** on local, on a real external attempt, and on the default payload.
+- **Prompt injection (T-PI-1/2):** the system prompt frames evidence as untrusted
+  and the injection-laden block is delivered only as `[E1]` data *after* the
+  grounding frame (never promoted to a rule); `map_citations` drops an invented
+  alias with `unknown_provider_citation_removed`, keeps citations **server-owned**
+  (the cited path is the server `ResolvedPath`, never the model's `/etc/shadow`),
+  and a path written in prose yields no citation.
+- **Path disclosure (T-FS-4):** the citation/search serializers expose
+  `display_path` only; `scan_root` is serialized **solely** by
+  `serialize_location` and by no evidence-facing serializer.
+
+Endpoint-level controls (allowlist rejection, symlink skipping, sync no-write,
+the real OpenAI request contract) remain covered by the integration suite and
+`test_locations_browse`/`test_sync_plan`/`test_openai_provider`; the 8.b
+traceability table now names the guarding test per threat. Offline suite **221
+passed, 96 skipped** (integration needs compose PG); ruff/format/mypy clean (102
+source files).
 
 ---
 
