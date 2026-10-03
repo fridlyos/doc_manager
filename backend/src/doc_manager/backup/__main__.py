@@ -1,6 +1,7 @@
 """Backup maintenance CLI (Phase 8.c).
 
     python -m doc_manager.backup run       # produce a completed backup set
+    python -m doc_manager.backup list      # list restorable set ids (skips .partial)
     python -m doc_manager.backup verify ID # verify a completed set's checksums
 
 Run through the maintenance compose profile, which mounts the local staging volume
@@ -14,7 +15,7 @@ from pathlib import Path
 
 from doc_manager.backup.checksums import verify_sums
 from doc_manager.backup.default_steps import DefaultSteps
-from doc_manager.backup.runner import COMPLETED_MARKER, run_backup
+from doc_manager.backup.runner import COMPLETED_MARKER, discover_completed_sets, run_backup
 from doc_manager.core.config import get_settings
 from doc_manager.core.logging import configure_logging, get_logger
 
@@ -51,6 +52,15 @@ def main(argv: list[str]) -> int:
             retention_monthly=settings.backup_retention_monthly,
         )
         log.info("backup_run_ok", backup_id=result.backup_id, pruned=len(result.pruned))
+        return 0
+
+    if command == "list":
+        # Restorable sets only (COMPLETED marker present); .partial is excluded.
+        # One id per line on stdout, newest first — consumable by a NAS-side check.
+        sets = discover_completed_sets(backups)
+        for backup_id, _ in sets:
+            print(backup_id)
+        log.info("list_completed", count=len(sets))
         return 0
 
     if command == "verify":

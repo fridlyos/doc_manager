@@ -171,19 +171,32 @@ def _publish(stage: Path, backup_root: Path, backup_id: str) -> Path:
     return final
 
 
-def _prune(backup_root: Path, daily: int, weekly: int, monthly: int) -> list[str]:
+def discover_completed_sets(backup_root: Path) -> list[tuple[str, datetime]]:
+    """Restorable sets under ``completed/``, newest first.
+
+    A set counts only when it carries the ``COMPLETED`` marker and its directory
+    name is a valid backup-id timestamp. An interrupted ``<id>.partial`` publish is
+    excluded — the same rule the NAS side uses to decide a set is restorable, so a
+    half-copied set is never counted or restored.
+    """
     completed_dir = backup_root / "completed"
     if not completed_dir.is_dir():
         return []
     dated: list[tuple[str, datetime]] = []
     for entry in completed_dir.iterdir():
         if not (entry / COMPLETED_MARKER).is_file():
-            continue  # only prune among fully-completed sets
+            continue  # only fully-completed sets (skips <id>.partial)
         try:
             when = datetime.strptime(entry.name, "%Y%m%dT%H%M%SZ").replace(tzinfo=UTC)
         except ValueError:
             continue
         dated.append((entry.name, when))
+    return sorted(dated, key=lambda pair: pair[1], reverse=True)
+
+
+def _prune(backup_root: Path, daily: int, weekly: int, monthly: int) -> list[str]:
+    completed_dir = backup_root / "completed"
+    dated = discover_completed_sets(backup_root)
     pruned = select_pruned(dated, daily=daily, weekly=weekly, monthly=monthly)
     for backup_id in pruned:
         shutil.rmtree(completed_dir / backup_id, ignore_errors=True)

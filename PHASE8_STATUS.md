@@ -19,11 +19,11 @@ document** over the features built in Phases 1–7 — little new product surfac
 | 8.b | Threat-model review — filesystem access + prompt injection | **✅ complete** |
 | 8.c | Coordinated PG dump + Qdrant snapshot + artifact inventory + checksums + atomic completion + retention (backup maintenance profile) | **✅ complete** |
 | 8.d | Backup/restore, optional PostgreSQL PITR, upgrade/migration, model-setup, troubleshooting guides | **✅ complete** |
-| 8.e | Provider enablement, key rotation, external-data review, rate-limit/cost-control, incident-disable procedures | ⬜ not started |
+| 8.e | Provider enablement, key rotation, external-data review, rate-limit/cost-control, incident-disable procedures | **✅ complete** |
 | 8.f | Threat-model tests — secret leakage, accidental egress, prompt injection, path/metadata disclosure | **✅ complete** |
-| 8.g | Connect completed-backup directory to NAS external-backup workflow without exposing live volume internals | ⬜ not started |
-| 8.h | Performance measurements on a representative local corpus | ⬜ not started |
-| 8.i | Accessibility + browser workflow review | ⬜ not started |
+| 8.g | Connect completed-backup directory to NAS external-backup workflow without exposing live volume internals | **✅ complete** |
+| 8.h | Performance measurements on a representative local corpus | **✅ complete (method + harness; numbers pending a live run)** |
+| 8.i | Accessibility + browser workflow review | **✅ complete (review + low-risk fixes; backlog documented)** |
 
 ## Exit criteria (whole phase)
 
@@ -217,6 +217,40 @@ hash *change*).
   known-query is automated (drill); the live-NAS copy stays a documented manual
   drill. `libpq_url` promoted to public; backup service reused (no new service);
   job helpers kept local to the drill (no shared-helper extraction).
+
+### 8.e / 8.g / 8.h / 8.i + known-limits ✅ (2026-10-03)
+
+- **8.e** `docs/operations/provider-operations.md` — enablement, OpenAI key
+  rotation (Docker-secret swap + API recreate, read per request), external-data
+  review (the `data_boundary` counts; metadata counters structurally zero),
+  cost-control table (evidence/output token caps + timeouts from `config.py`), and
+  one-flag incident disable (`DOCMAN_EXTERNAL_LLM_ENABLED=false`, fails closed,
+  local Ask + search keep working).
+- **8.g** NAS external-backup detection: `discover_completed_sets()` extracted in
+  `backup/runner.py` (reused by the retention prune) + `python -m doc_manager.backup
+  list` (restorable ids, newest first, `.partial`/malformed excluded) + a unit
+  test; documented in `backup-restore.md`. Crash-safe publish (`.partial` → rename
+  → `COMPLETED` last) already existed from 8.c; only the live-volume internals ever
+  stay off the NAS.
+- **8.h** `docs/operations/performance.md` + `scripts/perf-measure.sh` (dev-only
+  search P50/P95 + Ask timing harness over the synthetic corpus; scan/index
+  throughput read from the jobs API). Documented local run with corpus/hardware +
+  tuning fields; **numbers pending a live run** (no Docker/PG in this env), per open
+  decision #3 — not a CI gate.
+- **8.i** `docs/operations/accessibility.md` — self-review; **fixes applied:**
+  `:focus-visible` outlines (`global.css`) and `aria-live`/`role="alert"` on the
+  streamed Ask (`AskPage.tsx`). Backlog documented (modal focus-trap/restore, skip
+  link, colour-only cues, `--disabled` contrast, axe pass) per open decision #4.
+  Frontend suite 24/24 pass.
+- **Known-limitations** `docs/operations/known-limitations.md` (exit criterion #4):
+  OCR deferred, PDF/TXT/MD only, single embedding profile, no external embeddings,
+  sync is report-only (ADR 0006), stateless Ask/no history, restore needs live
+  sources, PITR off, mapped-drive + manual-migration caveats, single-operator
+  (no auth/TLS/multi-tenant).
+
+**Phase 8 feature work complete.** Remaining before calling the MVP released:
+execute the PG-backed drill + the README DoD E2E against a live stack, and record
+a performance baseline row.
 
 ---
 

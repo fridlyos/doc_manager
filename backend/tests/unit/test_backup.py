@@ -260,3 +260,37 @@ def test_manifest_snapshot_none_and_backupsteps_protocol() -> None:
     steps: BackupSteps = FakeSteps()
     assert hasattr(steps, "dump_postgres")
     assert hasattr(steps, "inventory_artifacts")
+
+
+def test_discover_completed_sets_excludes_partial(tmp_path: Path) -> None:
+    # NAS-side detection (8.g): only COMPLETED sets are restorable; a .partial
+    # publish and a malformed-name directory are never counted.
+    from doc_manager.backup.runner import discover_completed_sets
+
+    staging, backups = _roots(tmp_path)
+    base = datetime(2026, 8, 6, 1, tzinfo=UTC)
+    good = [
+        run_backup(
+            staging_root=staging,
+            backup_root=backups,
+            steps=FakeSteps(),
+            config_snapshot={},
+            retention_daily=99,
+            retention_weekly=99,
+            retention_monthly=99,
+            now=base + timedelta(days=d),
+        ).backup_id
+        for d in range(2)
+    ]
+    completed = backups / "completed"
+    # An interrupted publish: dir + manifest but no COMPLETED marker.
+    partial = completed / "20260810T120000Z.partial"
+    partial.mkdir()
+    (partial / "manifest.json").write_text("{}", encoding="utf-8")
+    # A stray non-timestamp directory, even with a marker, is ignored.
+    stray = completed / "not-a-backup"
+    stray.mkdir()
+    (stray / COMPLETED_MARKER).write_text("x\n", encoding="utf-8")
+
+    found = discover_completed_sets(backups)
+    assert [bid for bid, _ in found] == sorted(good, reverse=True)  # newest first, only good sets

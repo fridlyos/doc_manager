@@ -89,6 +89,27 @@ Requires the `COMPLETED` marker and recomputes the SHA-256 of every file in
 `SHA256SUMS`. Exit 0 only when the whole set verifies. Run this before trusting a
 set for restore and after any copy to the NAS.
 
+## NAS external-backup detection
+
+Backup sets are published straight onto the NAS backup share (`/backups`, mounted
+only into the maintenance service). The publish is crash-safe on a single share
+(TECHSTACK §11.3): the coordinator copies into `completed/<id>.partial`, verifies,
+atomically renames to `completed/<id>`, and writes the `COMPLETED` marker **last**.
+The marker is therefore the sole signal that a set is restorable.
+
+A NAS-side check (or an operator) lists restorable sets with:
+
+```bash
+docker compose --profile maintenance run --rm backup python -m doc_manager.backup list
+```
+
+`list` prints restorable set ids (newest first) and **excludes** any interrupted
+`<id>.partial` or malformed directory — the same `discover_completed_sets` rule the
+retention prune uses. So a half-copied set is never counted, listed, pruned, or
+restored; a reader seeing no `COMPLETED` marker must treat the set as incomplete.
+Live Docker volume internals never cross to the NAS — only the application-aware
+set does, written solely by the maintenance service.
+
 ## Restore procedure
 
 > The backup maintenance image carries `pg_dump`/`pg_restore`/`psql`
