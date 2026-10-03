@@ -225,6 +225,9 @@ counters are zero on a real external attempt.
 - Multi-tenant isolation is out of scope for the MVP (single-operator deployment).
 - Backup/secret/egress threats are enumerated and **tested** in Phase 8.f; this
   document cross-references them but does not restate the controls.
+- The restore path (`doc_manager.restore`) adds no new secret surface: it reads
+  only `settings.database_url`, writes only to `postgres`, produces no manifest,
+  and never touches a source document root — same boundary as backup.
 
 ## 5. Control → test traceability (summary)
 

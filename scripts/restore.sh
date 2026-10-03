@@ -1,10 +1,20 @@
 #!/usr/bin/env bash
-# Restore from a completed backup set — PHASE 1 SKELETON.
+# Restore a completed backup set into an EMPTY PostgreSQL database (Phase 8 DoD).
 #
-# Restore authority order (TECHSTACK 11.4): PostgreSQL is authoritative; Qdrant
-# is a rebuildable index. A missing/incompatible Qdrant snapshot must not block
-# recovery — the collection can be rebuilt from PostgreSQL plus source documents
-# or extracted-text artifacts. Full implementation lands in Phase 8.
+# Thin wrapper around `python -m doc_manager.restore run <id>`. The Python
+# orchestrator owns the discipline: fail-closed precheck (COMPLETED marker +
+# SHA-256 checksums + readable manifest), then `psql` globals + `pg_restore` the
+# custom dump. This wrapper only fails fast on the obvious preconditions.
+#
+# Restore PostgreSQL first; then rebuild the vector index (the index is NOT in the
+# set — it is rebuilt from the catalog + live sources):
+#   docker compose up -d
+#   curl -X POST 'http://127.0.0.1:8000/api/v1/system/reindex?rebuild_vectors=true'
+#   docker compose --profile maintenance run --rm backup /scripts/verify-consistency.sh
+#
+# Run via the maintenance profile (reuses the backup service: it has pg_restore,
+# the DB URL, and depends on a healthy postgres):
+#   docker compose --profile maintenance run --rm backup /scripts/restore.sh <backup-id>
 set -euo pipefail
 
 backup_id="${1:-}"
@@ -18,11 +28,7 @@ if [[ -z "$backup_id" ]]; then
 fi
 
 set_dir="$BACKUPS/completed/$backup_id"
-[[ -d "$set_dir" ]] || { echo "[FAIL] no completed set: $set_dir"; exit 1; }
-[[ -f "$set_dir/COMPLETED" ]] || { echo "[FAIL] set has no completion marker (not restorable)"; exit 1; }
+[[ -d "$set_dir" ]] || { echo "[FAIL] no completed set: $set_dir" >&2; exit 1; }
+[[ -f "$set_dir/COMPLETED" ]] || { echo "[FAIL] set has no completion marker (not restorable)" >&2; exit 1; }
 
-echo "[TODO Phase 8] verify manifest + checksums for $backup_id"
-echo "[TODO Phase 8] restore PostgreSQL logical dump into an empty database"
-echo "[TODO Phase 8] restore or rebuild the Qdrant collection"
-echo "[TODO Phase 8] verify catalog/vector consistency"
-echo "SKELETON — no changes made."
+exec python -m doc_manager.restore run "$backup_id"

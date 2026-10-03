@@ -157,6 +157,73 @@ async def test_location_reindex_fans_out_and_stays_idempotent(
     assert second_chunks == first_chunks
 
 
+async def _count_points(client: object, collection: str) -> int:
+    if not await client.collection_exists(collection):  # type: ignore[attr-defined]
+        return 0
+    return (await client.count(collection)).count  # type: ignore[attr-defined]
+
+
+async def test_rebuild_vectors_repopulates_an_emptied_qdrant(
+    tmp_path: Path,
+    db_engine: AsyncEngine,
+    session_factory: async_sessionmaker[AsyncSession],
+    idx_env: object,
+    vector_env: object,
+) -> None:
+    """Disaster-recovery path: after the vector store is wiped but the catalog's
+    chunk rows survive (a PostgreSQL restore into an empty Qdrant), a plain reindex
+    leaves Qdrant empty — the catalog-only ``_already_indexed`` check short-circuits
+    — while ``rebuild_vectors`` forces re-embedding and restores the points."""
+    client = vector_env.client  # type: ignore[attr-defined]
+    collection = vector_env.embedding.profile.collection_name("doc_chunks")  # type: ignore[attr-defined]
+
+    (tmp_path / "a.txt").write_text("alpha content here")
+    location = await _make_location(session_factory, tmp_path)
+    engine = JobEngine()
+    await _scan_and_index(engine, db_engine, session_factory, location)
+
+    async with session_factory() as session:
+        chunk_count = (await session.scalars(select(func.count()).select_from(Chunk))).one()
+    assert chunk_count > 0
+    assert await _count_points(client, collection) == chunk_count
+
+    # Simulate an emptied qdrant_data: drop the collection, keep the chunk rows.
+    await client.delete_collection(collection)
+    assert await _count_points(client, collection) == 0
+
+    # A plain reindex does NOT repopulate — chunk rows still present, so index_file
+    # treats the content as already indexed and never re-embeds.
+    async with session_factory() as session:
+        await engine.enqueue(
+            session,
+            job_type=JobType.reindex_all_for_profile,
+            payload={"version": 1, "scope": "all"},
+            origin=JobOrigin.api,
+            dedupe_key="reindex:all",
+        )
+        await session.commit()
+    await _drain(engine, db_engine)
+    assert await _count_points(client, collection) == 0
+
+    # rebuild_vectors=True forces the re-embed and restores every point.
+    async with session_factory() as session:
+        await engine.enqueue(
+            session,
+            job_type=JobType.reindex_all_for_profile,
+            payload={"version": 1, "scope": "all", "rebuild_vectors": True},
+            origin=JobOrigin.api,
+            dedupe_key="reindex:all",
+        )
+        await session.commit()
+    await _drain(engine, db_engine)
+    assert await _count_points(client, collection) == chunk_count
+
+    # Idempotent: chunk rows are unchanged by the forced rebuild.
+    async with session_factory() as session:
+        after = (await session.scalars(select(func.count()).select_from(Chunk))).one()
+    assert after == chunk_count
+
+
 async def test_reindex_scope_all_covers_every_location(
     tmp_path: Path,
     db_engine: AsyncEngine,

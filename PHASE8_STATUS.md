@@ -51,7 +51,10 @@ document** over the features built in Phases 1–7 — little new product surfac
   model setup, troubleshooting, key rotation, cost control, incident-disable).
 - **Consistency + rebuild:** `catalog_consistency_check` (Phase 4.e),
   `remove_stale_vectors`, `reindex_all_for_profile` (Phase 6) — the restore
-  consistency check + vector rebuild-from-catalog path (§11.4).
+  consistency check + vector rebuild path (§11.4). **Correction (DoD):** the
+  rebuild re-reads the **live sources**, not the catalog/artifacts, and a
+  same-profile rebuild needed the new `rebuild_vectors` flag — see the DoD
+  restore-drill note below.
 - **Security boundary:** external-processing policy + zero-metadata data-boundary
   counters (Phase 5.c), server-owned citations (5.e), Docker-secret keys (5.d),
   read-only sources, display-path-only responses. 8.b/8.f **review + test** these.
@@ -176,6 +179,44 @@ the real OpenAI request contract) remain covered by the integration suite and
 traceability table now names the guarding test per threat. Offline suite **221
 passed, 96 skipped** (integration needs compose PG); ruff/format/mypy clean (102
 source files).
+
+### DoD — restore drill + the disaster-recovery fix it exposed ✅ (2026-10-03)
+
+Built the restore side and proved exit-criterion #3 end to end. **It exposed a
+real product bug:** `index_file._already_indexed` decides "indexed" from
+PostgreSQL only (a `ContentObject` + matching `Chunk` count), never Qdrant — so
+after a `pg_restore` restores the chunk rows, a plain `reindex` short-circuits and
+leaves an emptied Qdrant **empty**. The §11.4 "rebuildable from the catalog" claim
+was therefore false for a same-profile restore (it only self-healed on a profile
+hash *change*).
+
+- **Fix:** a `rebuild_vectors` flag threaded `reindex_all_for_profile` →
+  `_fan_out` → `index_file` (bypasses the `_already_indexed` short-circuit) and
+  exposed as `POST /api/v1/system/reindex?rebuild_vectors=true`. Idempotent on the
+  deterministic point id. New `test_reindex` case proves an emptied Qdrant is
+  repopulated only with the flag.
+- **Restore module** `backend/src/doc_manager/restore/` mirrors `backup/`:
+  `run_restore` (fail-closed precheck — completion marker + `verify_sums` +
+  manifest — then `psql` globals + `pg_restore` into an empty DB), `DefaultRestoreSteps`
+  (reuses the now-public `backup.default_steps.libpq_url`), and a CLI
+  (`run <id>`, `verify-consistency` — the only non-test consumer of
+  `scan_consistency`, exit 1 on drift). PG-only restore; the vector rebuild is the
+  separate operational step.
+- **Scripts/compose:** `scripts/restore.sh` rewritten from skeleton to a thin CLI
+  wrapper; new `scripts/verify-consistency.sh`; `make restore BACKUP_ID=` +
+  `make verify-consistency`; the existing `backup` maintenance service is reused
+  (it already carries `postgresql-client-16` + the DB URL).
+- **Tests:** `tests/unit/test_restore.py` (10, offline — precheck fail-closed ×4,
+  ordering, step-failure propagation, CLI exit codes, protocol);
+  `tests/integration/test_restore_drill.py` — the exit-criterion-#3 proof:
+  seed→index→real `pg_dump`→wipe (empty DB + fresh in-memory Qdrant)→`pg_restore`→
+  `rebuild_vectors` reindex→`scan_consistency(...).clean`→golden-query search, with
+  a hermetic DROP/CREATE+migrate teardown. Skips without compose PG or PG client
+  tools. Offline: ruff/format clean, mypy clean, unit suite green.
+- **Open decision #1 resolved:** the local empty-volume restore + consistency +
+  known-query is automated (drill); the live-NAS copy stays a documented manual
+  drill. `libpq_url` promoted to public; backup service reused (no new service);
+  job helpers kept local to the drill (no shared-helper extraction).
 
 ---
 

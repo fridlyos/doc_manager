@@ -1,12 +1,12 @@
 # Backup and restore
 
-The application-aware backup coordinator is implemented (Phase 8.c): a single
-`maintenance`-profile command produces a checksum-verified, atomically published
-backup set. The **restore** side is documented here as an operator procedure you
-can run today with the tools already in the maintenance image; the fully scripted
-empty-volume restore drill (`scripts/restore.sh`, which is still a skeleton) and
-the automated post-restore consistency gate land with the Phase 8 release
-Definition-of-Done drill.
+Both sides are implemented. The application-aware backup coordinator (Phase 8.c)
+produces a checksum-verified, atomically published set; the restore coordinator
+(Phase 8 DoD) verifies a set and restores it into an **empty** PostgreSQL via
+`scripts/restore.sh` → `python -m doc_manager.restore`, and a
+`verify-consistency` command gates the rebuilt vector index. An automated restore
+drill (`tests/integration/test_restore_drill.py`) proves the whole
+seed→backup→wipe→restore→rebuild→consistency→known-query path end to end.
 
 ## Authority and recovery model (TECHSTACK §11.4)
 
@@ -89,7 +89,7 @@ Requires the `COMPLETED` marker and recomputes the SHA-256 of every file in
 `SHA256SUMS`. Exit 0 only when the whole set verifies. Run this before trusting a
 set for restore and after any copy to the NAS.
 
-## Restore procedure (manual, operator-run)
+## Restore procedure
 
 > The backup maintenance image carries `pg_dump`/`pg_restore`/`psql`
 > (postgresql-client-16) and reaches `postgres` and `qdrant` on the compose
@@ -109,7 +109,17 @@ docker compose up -d postgres qdrant
 page checksums (`--data-checksums`). For an in-place disaster recovery onto a new
 host, start only postgres/qdrant with empty named volumes.
 
-**2. Restore PostgreSQL** (globals first, then the custom-format dump):
+**2. Restore PostgreSQL.** The one command — verifies the set (marker + checksums
++ manifest) fail-closed, then restores globals and the custom-format dump:
+
+```bash
+make restore BACKUP_ID=<backup-id>
+# = docker compose --profile maintenance run --rm backup /scripts/restore.sh <backup-id>
+```
+
+Under the hood `restore.sh` execs `python -m doc_manager.restore run <id>`
+(`psql -f globals.sql` then `pg_restore --clean --if-exists --no-owner`). The
+equivalent by hand, if you need to drive `pg_restore` directly:
 
 ```bash
 docker compose --profile maintenance run --rm backup bash -lc '
@@ -131,37 +141,56 @@ libpq reads `PGHOST`/`PGUSER`/`PGPASSWORD`/`PGDATABASE` directly, so no URL is
 needed. Set them from the same credentials the stack uses (compose defaults:
 user `docman`, db `docman`).
 
-**3. Restore or rebuild the vector index.** Bring the API and worker up
-(`docker compose up -d`), then:
+**3. Rebuild the vector index.** The current coordinator does **not** store a
+Qdrant snapshot in the set — it records only the collection/profile mapping in
+the manifest (a downloadable snapshot is a future capability). So after a restore
+the vector store is empty and is rebuilt from the catalog + the **live source
+documents**. Bring the API and worker up (`docker compose up -d`), then:
 
-- **If the set has a Qdrant snapshot** and the manifest's embedding profile
-  matches the current config: restore the snapshot into Qdrant (the
-  collection/profile mapping is recorded under `qdrant/`). This is the fast path.
-- **Otherwise (no snapshot, or a profile mismatch): rebuild from the catalog**:
+```bash
+curl -X POST 'http://127.0.0.1:8000/api/v1/system/reindex?rebuild_vectors=true'
+```
 
-  ```bash
-  curl -X POST http://127.0.0.1:8000/api/v1/system/reindex
-  ```
+- `reindex_all_for_profile` fans out one `index_file` per catalog entry. Each
+  child **re-reads the live source file** (it re-stats and re-hashes
+  `scan_root/relative_path` and skips a file that is missing or changed), re-runs
+  extraction, and re-embeds + upserts vector points. The source mount must be
+  present and unchanged — which it is, because sources are read-only and never
+  part of a backup set.
+- **`rebuild_vectors=true` is required after a same-profile restore.** The
+  catalog's `chunks` rows survive the PostgreSQL restore, and the normal
+  "already indexed" check is catalog-only — so a plain reindex would conclude the
+  content is indexed and leave the empty Qdrant empty. The flag forces
+  re-embedding. Upserts are idempotent on deterministic point ids, so it never
+  duplicates. (Omit the flag only when the embedding profile changed, where the
+  new profile already forces a re-embed.)
+- This does not retire the previous profile's points; run
+  `POST /system/remove-stale-vectors` separately after an embedding-profile change.
 
-  `reindex_all_for_profile` re-embeds and re-upserts every chunk from the catalog
-  + extracted-text artifacts, then retires stale vectors. This is always correct
-  because the catalog is authoritative; the snapshot is only an optimization.
+**4. Validate.** Gate on the SQL↔vector consistency check, then confirm a known
+query:
 
-**4. Validate.** Confirm `GET /api/v1/system/status` is healthy, then run a
-**known-query search** that you know should return specific evidence and confirm
-the expected documents and citations come back. This is the consistency check an
-operator can perform today; the automated `catalog_consistency_check` gate is
-wired into the scripted restore drill delivered with the release DoD.
+```bash
+make verify-consistency
+# = docker compose --profile maintenance run --rm backup /scripts/verify-consistency.sh
+```
 
-## Known limitations of the restore path (today)
+`verify-consistency` scans the catalog's chunks against the Qdrant points for the
+active embedding profile and exits non-zero if any point is missing or orphaned —
+so a half-rebuilt index fails loudly. Then confirm `GET /api/v1/system/status` is
+healthy and run a **known-query search** that should return specific evidence,
+checking the expected documents + citations come back. The automated restore
+drill (`tests/integration/test_restore_drill.py`) performs exactly this sequence.
 
-- `scripts/restore.sh` is still a skeleton — it refuses to act and prints the
-  intended steps. Use the manual procedure above until the DoD restore drill
-  lands.
+## Known limitations of the restore path
+
 - Point-in-time recovery between nightly dumps is not enabled by default; the
   nightly logical dump is the MVP recovery authority. See
   [`postgresql-pitr.md`](postgresql-pitr.md) for the optional WAL-archiving
   trade-off.
+- The vector index is **not** stored in the set; it is always rebuilt from the
+  catalog + live sources (with `rebuild_vectors=true`), so restore requires the
+  source documents to be mounted and unchanged.
 - Live Docker volume internals are never copied to the NAS; only the
   application-aware set crosses, so restore always goes through `pg_restore` +
   index rebuild, not a volume copy.

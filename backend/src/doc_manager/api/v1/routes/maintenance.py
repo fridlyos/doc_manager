@@ -35,13 +35,19 @@ async def request_reindex_all(
     session: Annotated[AsyncSession, Depends(get_session)],
     settings: Annotated[Settings, Depends(get_settings_dep)],
     idempotency_key: Annotated[str, Depends(require_idempotency_key)],
+    rebuild_vectors: bool = False,
 ) -> dict[str, Any]:
-    """Re-index every eligible document across all locations (durable fan-out)."""
+    """Re-index every eligible document across all locations (durable fan-out).
+
+    ``rebuild_vectors=true`` forces re-embedding even for content the catalog
+    already records as indexed — the disaster-recovery path after a restore into an
+    empty Qdrant, where the catalog's chunk rows survived but the vectors did not.
+    """
     engine = JobEngine(
         base_delay_seconds=settings.job_retry_base_delay_seconds,
         max_delay_seconds=settings.job_retry_max_delay_seconds,
     )
-    fingerprint = request_fingerprint({"scope": "all"}, None)
+    fingerprint = request_fingerprint({"scope": "all", "rebuild_vectors": rebuild_vectors}, None)
     outcome = await reserve_idempotency(
         session,
         method="POST",
@@ -55,7 +61,7 @@ async def request_reindex_all(
         job, coalesced = await engine.enqueue(
             session,
             job_type=JobType.reindex_all_for_profile,
-            payload={"version": 1, "scope": "all"},
+            payload={"version": 1, "scope": "all", "rebuild_vectors": rebuild_vectors},
             origin=JobOrigin.api,
             dedupe_key="reindex:all",
             max_attempts=settings.job_max_attempts,

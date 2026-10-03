@@ -27,8 +27,11 @@ _POSTGRES_GLOBALS = "globals.sql"
 _QDRANT_SNAPSHOT = "qdrant-snapshot.snapshot"
 
 
-def _libpq_url(database_url: str) -> str:
-    """Strip the SQLAlchemy driver so ``pg_dump`` gets a plain libpq URI."""
+def libpq_url(database_url: str) -> str:
+    """Strip the SQLAlchemy driver so ``pg_dump``/``pg_restore`` get a plain libpq URI.
+
+    Public because the restore steps reuse the exact same conversion.
+    """
     return database_url.replace("postgresql+psycopg://", "postgresql://")
 
 
@@ -43,7 +46,7 @@ class DefaultSteps:
                 "--format=custom",
                 "--no-owner",
                 f"--file={stage / _POSTGRES_DUMP}",
-                _libpq_url(self._settings.database_url),
+                libpq_url(self._settings.database_url),
             ],
             check=True,
         )
@@ -56,7 +59,7 @@ class DefaultSteps:
                     "pg_dumpall",
                     "--globals-only",
                     "--dbname",
-                    _libpq_url(self._settings.database_url),
+                    libpq_url(self._settings.database_url),
                 ],
                 check=True,
                 stdout=fh,
