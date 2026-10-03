@@ -46,6 +46,11 @@ async def handle_reindex_bulk(ctx: JobContext) -> None:
     scope = payload.get("scope")
     if scope not in ("location", "all"):
         raise PermanentJobError("bad_request", f"reindex scope must be location|all, got {scope!r}")
+    # Disaster-recovery rebuild: force re-embed even when the catalog's chunk rows
+    # already exist (e.g. after a PostgreSQL restore into an empty Qdrant). Without
+    # this, index_file's catalog-only "already indexed" check short-circuits and the
+    # empty vector store is never repopulated.
+    rebuild_vectors = bool(payload.get("rebuild_vectors", False))
 
     stmt = select(CatalogEntry.id).where(
         CatalogEntry.sha256.is_not(None),
@@ -57,7 +62,7 @@ async def handle_reindex_bulk(ctx: JobContext) -> None:
         stmt = stmt.where(CatalogEntry.source_location_id == job.source_location_id)
 
     entry_ids = list((await session.scalars(stmt)).all())
-    enqueued = await _fan_out(ctx, entry_ids)
+    enqueued = await _fan_out(ctx, entry_ids, rebuild_vectors=rebuild_vectors)
 
     await ctx.report_progress(
         phase="reindex", current=len(entry_ids), total=len(entry_ids), unit="files"
@@ -68,12 +73,15 @@ async def handle_reindex_bulk(ctx: JobContext) -> None:
         scope=scope,
         eligible=len(entry_ids),
         enqueued=enqueued,
+        rebuild_vectors=rebuild_vectors,
     )
     await ctx.engine.complete(session, job, worker_id=ctx.worker_id, lease_token=ctx.lease_token)
     await session.commit()
 
 
-async def _fan_out(ctx: JobContext, entry_ids: list[uuid.UUID]) -> int:
+async def _fan_out(
+    ctx: JobContext, entry_ids: list[uuid.UUID], *, rebuild_vectors: bool = False
+) -> int:
     """Enqueue a deduped index_file per entry under the parent's lineage."""
     max_attempts = get_settings().job_max_attempts
     root = ctx.job.root_job_id or ctx.job.id
@@ -82,7 +90,11 @@ async def _fan_out(ctx: JobContext, entry_ids: list[uuid.UUID]) -> int:
         _, coalesced = await ctx.engine.enqueue(
             ctx.session,
             job_type=JobType.index_file,
-            payload={"version": 1, "catalog_entry_id": str(entry_id)},
+            payload={
+                "version": 1,
+                "catalog_entry_id": str(entry_id),
+                "rebuild_vectors": rebuild_vectors,
+            },
             origin=JobOrigin.handler,
             catalog_entry_id=entry_id,
             dedupe_key=f"index:{entry_id}",

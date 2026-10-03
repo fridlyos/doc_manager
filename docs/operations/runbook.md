@@ -91,3 +91,14 @@ If drive-letter binding proves unreliable, the documented fallback is a direct
 read-only CIFS Docker volume for documents plus a separate CIFS backup volume,
 using a least-privilege NAS account — subject to a credential-exposure review.
 It still must not be used for live PostgreSQL or Qdrant data.
+
+## Related operations guides
+
+- [`backup-restore.md`](backup-restore.md) — backup set, verification, restore.
+- [`upgrade-migration.md`](upgrade-migration.md) — migrations, image bumps, when
+  a re-index is required.
+- [`model-setup.md`](model-setup.md) — chat + embedding model setup and cache.
+- [`provider-configuration.md`](provider-configuration.md) ·
+  [`external-processing.md`](external-processing.md) — generation providers.
+- [`postgresql-pitr.md`](postgresql-pitr.md) — optional PITR trade-offs.
+- [`troubleshooting.md`](troubleshooting.md) — symptom-indexed fixes.

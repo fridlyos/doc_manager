@@ -123,6 +123,10 @@ class Settings(BaseSettings):
     reaper_interval_seconds: float = 15.0
     scheduler_interval_seconds: float = 60.0
     worker_shutdown_grace_seconds: float = 25.0
+    # Cleanup grace periods (Phase 8.a): how often the worker garbage-collects
+    # abandoned staging / idempotency rows, and the age after which they qualify.
+    maintenance_interval_seconds: float = 3600.0
+    maintenance_retention_hours: int = 24
     chunk_target_tokens: int = 750
     chunk_overlap_tokens: int = 100
     search_top_k: int = 12

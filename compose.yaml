@@ -15,6 +15,12 @@ name: doc-manager
 services:
   postgres:
     image: postgres:16
+    # Resource limits (Phase 8.a). Honored by `docker compose` v2; tune via .env.
+    deploy:
+      resources:
+        limits:
+          cpus: "${DOCMAN_POSTGRES_CPUS:-2}"
+          memory: ${DOCMAN_POSTGRES_MEM:-2g}
     environment:
       POSTGRES_USER: ${DOCMAN_POSTGRES_USER:-docman}
       POSTGRES_PASSWORD: ${DOCMAN_POSTGRES_PASSWORD:-docman}
@@ -34,6 +40,11 @@ services:
 
   qdrant:
     image: qdrant/qdrant:v1.12.4
+    deploy:
+      resources:
+        limits:
+          cpus: "${DOCMAN_QDRANT_CPUS:-2}"
+          memory: ${DOCMAN_QDRANT_MEM:-2g}
     volumes:
       - qdrant_data:/qdrant/storage
     healthcheck:
@@ -49,6 +60,11 @@ services:
     build:
       context: .
       dockerfile: deploy/api.Dockerfile
+    deploy:
+      resources:
+        limits:
+          cpus: "${DOCMAN_API_CPUS:-2}"
+          memory: ${DOCMAN_API_MEM:-1g}
     env_file:
       - .env
     environment:
@@ -97,6 +113,12 @@ services:
     build:
       context: .
       dockerfile: deploy/worker.Dockerfile
+    # The worker loads the FastEmbed model; give it the most memory headroom.
+    deploy:
+      resources:
+        limits:
+          cpus: "${DOCMAN_WORKER_CPUS:-4}"
+          memory: ${DOCMAN_WORKER_MEM:-4g}
     env_file:
       - .env
     environment:
@@ -155,7 +177,7 @@ services:
   backup:
     build:
       context: .
-      dockerfile: deploy/worker.Dockerfile
+      dockerfile: deploy/backup.Dockerfile
     profiles: ["maintenance"]
     env_file:
       - .env
@@ -163,6 +185,9 @@ services:
       DOCMAN_DATABASE_URL: "postgresql+psycopg://${DOCMAN_POSTGRES_USER:-docman}:${DOCMAN_POSTGRES_PASSWORD:-docman}@postgres:5432/${DOCMAN_POSTGRES_DB:-docman}"
     volumes:
       - backup_staging:/staging
+      # Read-only view of the extracted-text artifacts, to inventory + checksum
+      # them into the set. Read-only: a backup never writes an artifact store.
+      - artifact_data:/app-data/extracted-text:ro
       # Writable NAS backup destination — mounted ONLY into this maintenance
       # service, never into api/worker/postgres/qdrant (12).
       - type: bind
@@ -176,7 +201,8 @@ services:
         condition: service_healthy
       qdrant:
         condition: service_healthy
-    entrypoint: ["sleep", "infinity"]
+    # No long-running entrypoint: this is a one-shot. The compose image CMD runs a
+    # backup; pass /scripts/backup.sh or /scripts/verify-backup.sh <id> to override.
 
 volumes:
   postgres_data:

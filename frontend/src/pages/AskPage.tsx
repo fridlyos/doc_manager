@@ -103,8 +103,16 @@ export function AskPage() {
         </button>
       </form>
 
-      {providers.isError && <p className="error">Unable to load providers.</p>}
-      {error && <p className="error">Ask failed: {error}</p>}
+      {providers.isError && (
+        <p className="error" role="alert">
+          Unable to load providers.
+        </p>
+      )}
+      {error && (
+        <p className="error" role="alert">
+          Ask failed: {error}
+        </p>
+      )}
 
       {confirmation && (
         <div className="confirm-box">
@@ -121,7 +129,7 @@ export function AskPage() {
       )}
 
       {(streaming || result) && !confirmation && (
-        <article className="answer">
+        <article className="answer" aria-live="polite" aria-busy={streaming}>
           <div className="answer-body">{result?.answer ?? (deltas || "…")}</div>
           {result?.status === "insufficient_evidence" && (
             <p className="notice">No supporting evidence was found for this question.</p>

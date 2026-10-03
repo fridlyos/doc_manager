@@ -48,6 +48,15 @@ preflight: ## Run storage/mount preflight checks
 backup: ## Run an on-demand application-aware backup
 	$(COMPOSE) --profile maintenance run --rm backup /scripts/backup.sh
 
+.PHONY: restore
+restore: ## Restore a completed set into an empty DB (BACKUP_ID=<id>)
+	@test -n "$(BACKUP_ID)" || { echo "usage: make restore BACKUP_ID=<id>"; exit 2; }
+	$(COMPOSE) --profile maintenance run --rm backup /scripts/restore.sh $(BACKUP_ID)
+
+.PHONY: verify-consistency
+verify-consistency: ## Post-restore SQL<->vector drift gate
+	$(COMPOSE) --profile maintenance run --rm backup /scripts/verify-consistency.sh
+
 # --- Backend quality gates (run from ./backend via uv) ---
 .PHONY: install
 install: ## Install backend deps + dev tools

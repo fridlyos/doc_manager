@@ -143,9 +143,17 @@ async def handle_index_file(ctx: JobContext) -> None:
     embedding_profile = embedding_service.profile
     qdrant = build_qdrant_repository(settings, embedding_profile)
 
+    # A disaster-recovery rebuild forces re-embedding even when the catalog already
+    # has the chunk rows, because `_already_indexed` is a PostgreSQL-only check and
+    # would otherwise skip re-populating an empty Qdrant after a restore. Upserts are
+    # idempotent on the deterministic chunk/point id, so forcing it never duplicates.
+    rebuild_vectors = bool((job.payload_json or {}).get("rebuild_vectors", False))
     vectors = None
-    if chunks and not await _already_indexed(
-        ctx.session, normalized, profile_hash, chunking_profile, embedding_profile, len(chunks)
+    if chunks and (
+        rebuild_vectors
+        or not await _already_indexed(
+            ctx.session, normalized, profile_hash, chunking_profile, embedding_profile, len(chunks)
+        )
     ):
         await qdrant.ensure_collection(embedding_profile)
         vectors = await asyncio.to_thread(

@@ -74,6 +74,7 @@ class WorkerRunner:
         ]
         tasks.append(asyncio.create_task(self._reaper_loop(), name="reaper"))
         tasks.append(asyncio.create_task(self._scheduler_loop(), name="scheduler"))
+        tasks.append(asyncio.create_task(self._maintenance_loop(), name="maintenance"))
         await self.stop.wait()
         log.info("worker_draining", worker_id=self.worker_id)
         done, pending = await asyncio.wait(
@@ -104,6 +105,19 @@ class WorkerRunner:
             except Exception:
                 log.exception("reaper_tick_failed")
             await self._sleep_unless_stopping(self.settings.reaper_interval_seconds)
+
+    async def _maintenance_loop(self) -> None:
+        while not self.stop.is_set():
+            try:
+                async with self.session_factory() as session:
+                    removed = await self.job_engine.gc_stale_rows(
+                        session, retention_hours=self.settings.maintenance_retention_hours
+                    )
+                if any(removed.values()):
+                    log.info("gc_stale_rows", **removed)
+            except Exception:
+                log.exception("maintenance_tick_failed")
+            await self._sleep_unless_stopping(self.settings.maintenance_interval_seconds)
 
     async def _scheduler_loop(self) -> None:
         while not self.stop.is_set():

@@ -20,11 +20,17 @@ from dataclasses import dataclass
 from datetime import datetime, timedelta
 from typing import Any
 
-from sqlalchemy import select, text, update
+from sqlalchemy import delete, select, text, update
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from doc_manager.db.models import IngestionJob, IngestionJobAttempt, JobEvent
+from doc_manager.db.models import (
+    IdempotencyRecord,
+    IngestionJob,
+    IngestionJobAttempt,
+    JobEvent,
+    ScanObservation,
+)
 from doc_manager.db.session import db_now
 from doc_manager.domain.enums import (
     TERMINAL_STATUSES,
@@ -889,3 +895,52 @@ class JobEngine:
             await session.rollback()
             raise
         return reaped
+
+    # -------------------------------------------------------------- maintenance
+
+    async def gc_stale_rows(
+        self,
+        session: AsyncSession,
+        *,
+        retention_hours: int = 24,
+        now: datetime | None = None,
+    ) -> dict[str, int]:
+        """Garbage-collect rows abandoned by interrupted work (Phase 8.a).
+
+        Two safe, idempotent deletions past a grace period:
+
+        * ``scan_observations`` whose owning scan job is **terminal** — a complete
+          scan folds and deletes its own staging, so anything left belongs to an
+          interrupted/failed scan and can never be reconciled.
+        * ``idempotency_records`` older than the retention window whose referenced
+          job is terminal (or was never created) — the contract retains a key for
+          at least 24 h and until its job is terminal (sec. 6.1).
+
+        Never touches rows tied to open (non-terminal) work. Commits.
+        """
+        cutoff = (now or await db_now(session)) - timedelta(hours=retention_hours)
+        terminal = [s.value for s in TERMINAL_STATUSES]
+        try:
+            obs = await session.execute(
+                delete(ScanObservation).where(
+                    ScanObservation.staged_at < cutoff,
+                    ScanObservation.job_id.in_(
+                        select(IngestionJob.id).where(IngestionJob.status.in_(terminal))
+                    ),
+                )
+            )
+            open_jobs = select(IngestionJob.id).where(IngestionJob.status.notin_(terminal))
+            idem = await session.execute(
+                delete(IdempotencyRecord).where(
+                    IdempotencyRecord.created_at < cutoff,
+                    IdempotencyRecord.job_id.notin_(open_jobs) | IdempotencyRecord.job_id.is_(None),
+                )
+            )
+            await session.commit()
+        except BaseException:
+            await session.rollback()
+            raise
+        return {
+            "scan_observations": int(getattr(obs, "rowcount", 0) or 0),
+            "idempotency_records": int(getattr(idem, "rowcount", 0) or 0),
+        }
