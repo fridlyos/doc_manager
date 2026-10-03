@@ -5,7 +5,8 @@
   --muted: #9aa2ad;
   --up: #3fb950;
   --down: #f85149;
-  --disabled: #6e7681;
+  /* Lightened from #6e7681 to clear WCAG AA (4.5:1) for small text (8.i). */
+  --disabled: #8b949e;
 }
 
 * {
@@ -63,6 +64,25 @@ body {
 .app-main {
   padding: 1.5rem;
   max-width: 1100px;
+}
+
+/* Responsive (Phase 9): header + nav wrap on narrow viewports; wide tables scroll
+   within main rather than forcing the page body to scroll horizontally. */
+.app-header {
+  flex-wrap: wrap;
+}
+@media (max-width: 720px) {
+  .app-header nav {
+    margin-left: 0;
+    flex-wrap: wrap;
+  }
+  .app-main {
+    overflow-x: auto;
+  }
+  table.resources,
+  table.components {
+    min-width: 40rem;
+  }
 }
 
 .status-meta {

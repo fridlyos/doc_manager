@@ -13,7 +13,7 @@ export function SystemStatusPage() {
   if (!data) return null;
 
   return (
-    <section>
+    <section aria-live="polite">
       <h2>System status</h2>
       <dl className="status-meta">
         <dt>Version</dt>
