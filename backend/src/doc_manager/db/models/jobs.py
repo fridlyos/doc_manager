@@ -117,6 +117,9 @@ class IngestionJob(Base):
     progress_unit: Mapped[str | None] = mapped_column(String(50), default=None)
     progress_message: Mapped[str | None] = mapped_column(String(500), default=None)
     progress_updated_at: Mapped[datetime | None] = mapped_column(default=None)
+    # Richer multi-counter breakdown for a scan (discovered/scanned/target +
+    # reconcile counts). Observability only; never gates completion (Phase 9).
+    progress_detail_json: Mapped[dict[str, Any] | None] = mapped_column(default=None)
 
     # --- Error (sanitized; never document text or tracebacks) ---
     error_class: Mapped[str | None] = mapped_column(String(30), default=None)

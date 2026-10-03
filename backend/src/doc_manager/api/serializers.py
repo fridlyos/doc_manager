@@ -270,6 +270,8 @@ def serialize_job(job: IngestionJob) -> dict[str, Any]:
             "current": job.progress_current or 0,
             "total": job.progress_total,
             "unit": job.progress_unit or "items",
+            "updated_at": iso_utc(job.progress_updated_at),
+            "detail": job.progress_detail_json,
         },
         "attempt_count": job.attempt_count,
         "max_attempts": job.max_attempts,

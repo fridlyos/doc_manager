@@ -745,6 +745,33 @@ class JobEngine:
         )
         return getattr(result, "rowcount", 0) == 1
 
+    async def update_progress_detail(
+        self,
+        session: AsyncSession,
+        *,
+        job_id: uuid.UUID,
+        worker_id: str,
+        lease_token: uuid.UUID,
+        detail: dict[str, Any],
+    ) -> bool:
+        """Fenced write of the rich progress breakdown (Phase 9).
+
+        Observability only — a rejected write (lost lease) is not an error; the
+        caller ignores the result. Does not touch the monotonic progress tuple.
+        """
+        result = await session.execute(
+            update(IngestionJob)
+            .where(
+                IngestionJob.id == job_id,
+                IngestionJob.status == JobStatus.running.value,
+                IngestionJob.lease_owner == worker_id,
+                IngestionJob.lease_token == lease_token,
+                IngestionJob.lease_expires_at > text("clock_timestamp()"),
+            )
+            .values(progress_detail_json=detail, progress_updated_at=text("clock_timestamp()"))
+        )
+        return getattr(result, "rowcount", 0) == 1
+
     # ------------------------------------------------------------- API actions
 
     async def request_cancel(

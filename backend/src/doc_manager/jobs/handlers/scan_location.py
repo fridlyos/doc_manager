@@ -237,11 +237,20 @@ async def handle_scan_location(ctx: JobContext) -> None:
             for item in batch
         )
         await session.commit()
+        scanned = min(start + _STAGE_BATCH_SIZE, len(observed))
         await ctx.report_progress(
             phase="files_discovered",
-            current=min(start + _STAGE_BATCH_SIZE, len(observed)),
+            current=scanned,
             total=len(observed),
             unit="files",
+        )
+        await ctx.report_progress_detail(
+            {
+                "phase": "scanning",
+                "discovered": len(observed),
+                "scanned": scanned,
+                "target": max(get_settings().scan_target_files, len(observed)),
+            }
         )
         ctx.check_boundary()
 
@@ -291,6 +300,28 @@ async def handle_scan_location(ctx: JobContext) -> None:
         # must match it (mapped-drive identity, TECHSTACK sec. 10).
         location.sentinel_id = check.observed_sentinel
     await session.execute(delete(ScanObservation).where(ScanObservation.job_id == job.id))
+    # Final progress breakdown (Phase 9). Written in the fenced transaction, still
+    # while the lease is held (status running), so it commits atomically with
+    # completion. Observability only — a lost-lease rowcount=0 is harmless.
+    await ctx.engine.update_progress_detail(
+        session,
+        job_id=job.id,
+        worker_id=ctx.worker_id,
+        lease_token=ctx.lease_token,
+        detail={
+            "phase": "reconciled",
+            "discovered": len(observed),
+            "scanned": len(observed),
+            "target": max(get_settings().scan_target_files, len(observed)),
+            "changed": counts.get("changed", 0),
+            "moved": counts.get("moved", 0),
+            "restored": counts.get("restored", 0),
+            "missing": counts.get("missing", 0),
+            "unchanged": counts.get("unchanged", 0),
+            "metadata": counts.get("metadata", 0),
+            "index_enqueued": enqueued,
+        },
+    )
     await ctx.engine.complete(session, job, worker_id=ctx.worker_id, lease_token=ctx.lease_token)
     await session.commit()
     log.info(
@@ -319,6 +350,10 @@ async def _enqueue_indexing(ctx: JobContext, location: SourceLocation) -> int:
             )
         )
     ).all()
+    # Link children to this scan so the progress view can aggregate their
+    # indexed/failed/remaining outcomes (Phase 9). A coalesced child keeps its
+    # original lineage — fine, the aggregate is best-effort observability.
+    root = ctx.job.root_job_id or ctx.job.id
     enqueued = 0
     for entry_id in entry_ids:
         _, coalesced = await ctx.engine.enqueue(
@@ -328,6 +363,7 @@ async def _enqueue_indexing(ctx: JobContext, location: SourceLocation) -> int:
             origin=JobOrigin.handler,
             catalog_entry_id=entry_id,
             dedupe_key=f"index:{entry_id}",
+            root_job_id=root,
             max_attempts=get_settings().job_max_attempts,
             actor="scan",
         )
