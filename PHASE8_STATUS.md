@@ -18,7 +18,7 @@ document** over the features built in Phases 1–7 — little new product surfac
 | 8.a | Resource limits, graceful shutdown, stale-lease recovery, cleanup grace periods | **✅ complete** |
 | 8.b | Threat-model review — filesystem access + prompt injection | **✅ complete** |
 | 8.c | Coordinated PG dump + Qdrant snapshot + artifact inventory + checksums + atomic completion + retention (backup maintenance profile) | **✅ complete** |
-| 8.d | Backup/restore, optional PostgreSQL PITR, upgrade/migration, model-setup, troubleshooting guides | ⬜ not started |
+| 8.d | Backup/restore, optional PostgreSQL PITR, upgrade/migration, model-setup, troubleshooting guides | **✅ complete** |
 | 8.e | Provider enablement, key rotation, external-data review, rate-limit/cost-control, incident-disable procedures | ⬜ not started |
 | 8.f | Threat-model tests — secret leakage, accidental egress, prompt injection, path/metadata disclosure | ⬜ not started |
 | 8.g | Connect completed-backup directory to NAS external-backup workflow without exposing live volume internals | ⬜ not started |
@@ -121,6 +121,29 @@ entrypoint so a passed script runs. `scripts/backup.sh` / `verify-backup.sh` are
 thin wrappers over `python -m doc_manager.backup {run,verify}`. 13 unit tests; full
 backend suite **301 pass, 1 skipped**; ruff/format/mypy clean. **Full report:
 `docs/architecture/phase-8c-backup.md`.**
+
+### 8.d — Backup/restore & lifecycle guides ✅ (2026-10-03)
+
+Extended `docs/operations/`. **Rewrote `backup-restore.md`** — was a stale "Phase 1
+skeleton"; now documents the real 8.c coordinator (set contents, staging→verify→
+atomic-publish→`COMPLETED`-last→GFS prune), verification, and an honest **manual
+empty-volume restore procedure** (fresh volumes → `psql globals.sql` +
+`pg_restore` via libpq `PG*` env → Qdrant snapshot restore *or*
+`POST /system/reindex` rebuild → known-query validation). States plainly that
+`scripts/restore.sh` is still a skeleton and the scripted drill + automated
+`catalog_consistency_check` gate land with the release DoD. **New docs:**
+`postgresql-pitr.md` (document-only per open decision #5 — nightly logical dump is
+the MVP authority; records why WAL-archiving PITR is off by default + an enable
+sketch), `upgrade-migration.md` (back-up-first; `alembic upgrade head` is manual,
+not auto-run; upgrade sequence with graceful worker stop; **when a re-index is
+required** = embedding-profile change only, provider switch never; PG-major
+dump/restore + Qdrant rebuild), `model-setup.md` (Ollama chat-model pull; FastEmbed
+embedding model downloads on first embed with **no persistent cache volume** →
+re-download on container recreate, pre-warm + override guidance), and
+`troubleshooting.md` (symptom-grouped: readiness/Qdrant-fs-check/migrations,
+mapped-drive + `unavailable` locations, model/generation, backup/restore,
+jobs/reaper/GC). All cross-linked; env-var names verified against
+`core/config.py` (`DOCMAN_` prefix). Docs-only — no code, tests, or gates touched.
 
 ---
 
