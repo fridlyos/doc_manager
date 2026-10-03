@@ -1,5 +1,5 @@
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import { render, screen } from "@testing-library/react";
+import { render, screen, within } from "@testing-library/react";
 import { afterEach, expect, test, vi } from "vitest";
 import { JobsPage } from "./JobsPage";
 
@@ -34,7 +34,9 @@ test("renders durable job state", async () => {
     </QueryClientProvider>,
   );
 
-  expect(await screen.findByText("scan_location")).toBeInTheDocument();
-  expect(screen.getByText("succeeded")).toBeInTheDocument();
-  expect(screen.getByText("1/3")).toBeInTheDocument();
+  // Scope to the table — "scan_location"/"succeeded" also appear as filter options.
+  const table = await screen.findByRole("table");
+  expect(within(table).getByText("scan_location")).toBeInTheDocument();
+  expect(within(table).getByText("succeeded")).toBeInTheDocument();
+  expect(within(table).getByText("1/3")).toBeInTheDocument();
 });

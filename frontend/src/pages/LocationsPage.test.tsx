@@ -1,5 +1,5 @@
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import { fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import { afterEach, expect, test, vi } from "vitest";
 import { LocationsPage, detectPathStyle } from "./LocationsPage";
 
@@ -8,6 +8,9 @@ afterEach(() => vi.restoreAllMocks());
 function json(body: unknown, status = 200) {
   return new Response(JSON.stringify(body), { status });
 }
+
+// The scan-progress panel polls jobs per location; default to no scans.
+const noJobs = json({ data: [], page: { limit: 50, has_more: false, next_cursor: null } });
 
 function capabilities(nativePicker: boolean, profile: "windows" | "unix" = "unix") {
   return json({
@@ -55,6 +58,7 @@ test("lists locations and submits a new location", async () => {
   fetchMock.mockImplementation(async (input, init) => {
     const url = String(input);
     const method = (init as RequestInit | undefined)?.method ?? "GET";
+    if (url.startsWith("/api/v1/jobs")) return noJobs;
     if (url.includes("/capabilities")) return capabilities(false);
     if (url === "/api/v1/locations" && method === "POST") return json({ data: docs }, 201);
     if (url.startsWith("/api/v1/locations")) {
@@ -80,7 +84,6 @@ test("lists locations and submits a new location", async () => {
 });
 
 test("deletes a location with If-Match after confirmation", async () => {
-  const confirmMock = vi.spyOn(window, "confirm").mockReturnValue(true);
   const docs = {
     id: "loc-9",
     name: "Docs",
@@ -95,6 +98,7 @@ test("deletes a location with If-Match after confirmation", async () => {
   fetchMock.mockImplementation(async (input, init) => {
     const url = String(input);
     const method = (init as RequestInit | undefined)?.method ?? "GET";
+    if (url.startsWith("/api/v1/jobs")) return noJobs;
     if (url.includes("/capabilities")) return capabilities(false);
     if (url === "/api/v1/locations/loc-9" && method === "DELETE")
       return new Response(null, { status: 204 });
@@ -106,8 +110,10 @@ test("deletes a location with If-Match after confirmation", async () => {
 
   renderPage();
 
+  // Clicking Delete opens a confirm dialog; the DELETE fires only on confirm.
   fireEvent.click(await screen.findByRole("button", { name: "Delete" }));
-  expect(confirmMock).toHaveBeenCalled();
+  const dialog = await screen.findByRole("dialog");
+  fireEvent.click(within(dialog).getByRole("button", { name: "Delete" }));
   await waitFor(() =>
     expect(postCall(fetchMock, "/api/v1/locations/loc-9", "DELETE")).toBeTruthy(),
   );

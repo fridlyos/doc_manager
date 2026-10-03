@@ -5,11 +5,18 @@ import {
   deleteLocation,
   fetchLocationCapabilities,
   fetchLocations,
+  patchLocation,
   pickFolderNative,
+  reindexLocation,
   requestLocationScan,
+  testLocation,
+  LocationTestResult,
   PathStyle,
+  SourceLocation,
 } from "../api/client";
+import { ConfirmDialog } from "../components/ConfirmDialog";
 import { FolderPickerModal } from "../components/FolderPickerModal";
+import { ScanProgress } from "../components/ScanProgress";
 
 export function detectPathStyle(scanRoot: string): PathStyle {
   if (/^\\\\/.test(scanRoot)) return "unc";
@@ -23,6 +30,123 @@ const PATH_STYLE_LABELS: Record<PathStyle, string> = {
   unc: "UNC share",
   mapped_drive: "Mapped drive",
 };
+
+function LocationRow({ location }: { location: SourceLocation }) {
+  const queryClient = useQueryClient();
+  const [confirmDelete, setConfirmDelete] = useState(false);
+  const [interval, setIntervalValue] = useState(String(location.scan_interval_minutes ?? ""));
+  const [testResult, setTestResult] = useState<LocationTestResult | null>(null);
+  const invalidate = () => queryClient.invalidateQueries({ queryKey: ["locations"] });
+
+  const scan = useMutation({ mutationFn: () => requestLocationScan(location.id) });
+  const reindex = useMutation({ mutationFn: () => reindexLocation(location.id) });
+  const toggle = useMutation({
+    mutationFn: () => patchLocation(location, { enabled: !location.enabled }),
+    onSuccess: invalidate,
+  });
+  const saveSchedule = useMutation({
+    mutationFn: () =>
+      patchLocation(location, {
+        scan_interval_minutes: interval.trim() === "" ? null : Number(interval),
+      }),
+    onSuccess: invalidate,
+  });
+  const test = useMutation({
+    mutationFn: () => testLocation(location.id),
+    onSuccess: setTestResult,
+  });
+  const remove = useMutation({
+    mutationFn: () => deleteLocation({ id: location.id, revision: location.revision }),
+    onSuccess: invalidate,
+  });
+
+  return (
+    <>
+      <tr>
+        <td>{location.name}</td>
+        <td>
+          <code>{location.display_root}</code>
+        </td>
+        <td>{location.enabled ? "enabled" : "disabled"}</td>
+        <td>
+          {location.last_successful_scan_at
+            ? new Date(location.last_successful_scan_at).toLocaleString()
+            : "never"}
+        </td>
+        <td className="row-actions">
+          <button disabled={scan.isPending} onClick={() => scan.mutate()}>
+            Scan
+          </button>
+          <button disabled={reindex.isPending} onClick={() => reindex.mutate()}>
+            Re-index
+          </button>
+          <button disabled={toggle.isPending} onClick={() => toggle.mutate()}>
+            {location.enabled ? "Disable" : "Enable"}
+          </button>
+          <button disabled={test.isPending} onClick={() => test.mutate()}>
+            Test
+          </button>
+          <button
+            className="danger"
+            disabled={remove.isPending}
+            onClick={() => setConfirmDelete(true)}
+          >
+            Delete
+          </button>
+        </td>
+      </tr>
+      <tr className="detail-row">
+        <td colSpan={5}>
+          <label className="schedule">
+            Scheduled scan every
+            <input
+              type="number"
+              min={1}
+              value={interval}
+              onChange={(e) => setIntervalValue(e.target.value)}
+              placeholder="off"
+              aria-label={`scan interval minutes for ${location.name}`}
+            />
+            minutes
+            <button disabled={saveSchedule.isPending} onClick={() => saveSchedule.mutate()}>
+              Save
+            </button>
+          </label>
+          {scan.isSuccess && <span className="notice"> Scan queued.</span>}
+          {reindex.isSuccess && <span className="notice"> Re-index queued.</span>}
+          {test.isError && <span className="error"> Test failed: {String(test.error)}</span>}
+          {testResult && (
+            <span className={testResult.ok ? "notice" : "error"}>
+              {" "}
+              Test {testResult.ok ? "passed" : "failed"}:{" "}
+              {testResult.checks.map((c) => `${c.name} ${c.ok ? "ok" : "FAIL"}`).join(", ")}
+            </span>
+          )}
+          {(toggle.isError || saveSchedule.isError || remove.isError) && (
+            <span className="error" role="alert">
+              {" "}
+              {String(toggle.error ?? saveSchedule.error ?? remove.error)}
+            </span>
+          )}
+          <ScanProgress locationId={location.id} />
+        </td>
+      </tr>
+      {confirmDelete && (
+        <ConfirmDialog
+          title="Delete location"
+          message={`Delete location "${location.name}"? Its catalog entries are removed; source files are untouched.`}
+          confirmLabel="Delete"
+          danger
+          onCancel={() => setConfirmDelete(false)}
+          onConfirm={() => {
+            setConfirmDelete(false);
+            remove.mutate();
+          }}
+        />
+      )}
+    </>
+  );
+}
 
 export function LocationsPage() {
   const queryClient = useQueryClient();
@@ -64,13 +188,6 @@ export function LocationsPage() {
       setName("");
       setScanRoot("");
       setPathStyle("auto");
-      await queryClient.invalidateQueries({ queryKey: ["locations"] });
-    },
-  });
-  const scan = useMutation({ mutationFn: requestLocationScan });
-  const remove = useMutation({
-    mutationFn: deleteLocation,
-    onSuccess: async () => {
       await queryClient.invalidateQueries({ queryKey: ["locations"] });
     },
   });
@@ -133,11 +250,9 @@ export function LocationsPage() {
         </button>
       </form>
       {create.isError && <p className="error">Could not create location: {String(create.error)}</p>}
-      {remove.isError && <p className="error">Could not delete location: {String(remove.error)}</p>}
       {nativePick.isError && (
         <p className="error">Folder picker failed: {String(nativePick.error)}</p>
       )}
-      {scan.isSuccess && <p className="notice">Scan queued.</p>}
       {locations.isLoading && <p>Loading locations…</p>}
       {locations.isError && (
         <p className="error">Unable to load locations: {String(locations.error)}</p>
@@ -156,34 +271,7 @@ export function LocationsPage() {
           </thead>
           <tbody>
             {locations.data.data.map((location) => (
-              <tr key={location.id}>
-                <td>{location.name}</td>
-                <td>
-                  <code>{location.display_root}</code>
-                </td>
-                <td>{location.enabled ? "enabled" : "disabled"}</td>
-                <td>
-                  {location.last_successful_scan_at
-                    ? new Date(location.last_successful_scan_at).toLocaleString()
-                    : "never"}
-                </td>
-                <td>
-                  <button disabled={scan.isPending} onClick={() => scan.mutate(location.id)}>
-                    Scan
-                  </button>
-                  <button
-                    className="danger"
-                    disabled={remove.isPending}
-                    onClick={() => {
-                      if (window.confirm(`Delete location "${location.name}"?`)) {
-                        remove.mutate({ id: location.id, revision: location.revision });
-                      }
-                    }}
-                  >
-                    Delete
-                  </button>
-                </td>
-              </tr>
+              <LocationRow key={location.id} location={location} />
             ))}
           </tbody>
         </table>
