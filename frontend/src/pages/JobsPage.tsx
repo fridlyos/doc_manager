@@ -4,7 +4,7 @@ import { fetchJobs } from "../api/client";
 export function JobsPage() {
   const jobs = useQuery({
     queryKey: ["jobs"],
-    queryFn: fetchJobs,
+    queryFn: () => fetchJobs(),
     refetchInterval: 5_000,
   });
 

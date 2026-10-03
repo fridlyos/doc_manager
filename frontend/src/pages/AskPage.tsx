@@ -65,7 +65,8 @@ export function AskPage() {
     void run(false);
   }
 
-  const confirmation = result?.status === "external_confirmation_required" ? result.confirmation : null;
+  const confirmation =
+    result?.status === "external_confirmation_required" ? result.confirmation : null;
 
   return (
     <section>
@@ -118,9 +119,9 @@ export function AskPage() {
         <div className="confirm-box">
           <p>
             <strong>External processing confirmation.</strong> This sends{" "}
-            {confirmation.evidence_blocks} evidence block(s) (
-            {confirmation.evidence_characters} characters) to{" "}
-            <code>{confirmation.provider_id}</code>. No paths, file names, or tags are sent.
+            {confirmation.evidence_blocks} evidence block(s) ({confirmation.evidence_characters}{" "}
+            characters) to <code>{confirmation.provider_id}</code>. No paths, file names, or tags
+            are sent.
           </p>
           <button onClick={() => void run(true)} disabled={streaming}>
             Send to external provider
@@ -134,9 +135,7 @@ export function AskPage() {
           {result?.status === "insufficient_evidence" && (
             <p className="notice">No supporting evidence was found for this question.</p>
           )}
-          {result?.status === "refused" && (
-            <p className="notice">The model declined to answer.</p>
-          )}
+          {result?.status === "refused" && <p className="notice">The model declined to answer.</p>}
           {result && result.warnings.length > 0 && (
             <p className="notice">Warnings: {result.warnings.join(", ")}</p>
           )}
@@ -150,7 +149,9 @@ export function AskPage() {
                       <span className="citation-ordinal">[{c.ordinal}]</span>
                       {primary ? <code>{primary.display_path}</code> : <em>path unavailable</em>}
                       {pageLabel(c) && <span className="chip">{pageLabel(c)}</span>}
-                      <span className={`chip availability-${c.availability}`}>{c.availability}</span>
+                      <span className={`chip availability-${c.availability}`}>
+                        {c.availability}
+                      </span>
                     </span>
                     <p className="citation-snippet">{c.snippet}</p>
                   </li>

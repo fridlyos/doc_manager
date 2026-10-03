@@ -74,14 +74,12 @@ test("lists duplicate groups and expands member paths", async () => {
 });
 
 test("rebuild posts to the rebuild endpoint", async () => {
-  const fetchMock = vi
-    .spyOn(globalThis, "fetch")
-    .mockImplementation((url) => {
-      if (String(url).includes("/duplicates/rebuild")) {
-        return Promise.resolve(new Response(JSON.stringify({ data: { id: "j1" } }), { status: 202 }));
-      }
-      return Promise.resolve(listResponse());
-    });
+  const fetchMock = vi.spyOn(globalThis, "fetch").mockImplementation((url) => {
+    if (String(url).includes("/duplicates/rebuild")) {
+      return Promise.resolve(new Response(JSON.stringify({ data: { id: "j1" } }), { status: 202 }));
+    }
+    return Promise.resolve(listResponse());
+  });
   renderPage();
 
   await screen.findByText("exact");

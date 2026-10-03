@@ -47,10 +47,27 @@ export interface SourceLocation {
   name: string;
   scan_root: string;
   display_root: string;
+  path_style?: PathStyle;
   enabled: boolean;
+  read_only?: boolean;
+  external_generation_policy?: "allow" | "deny";
   scan_interval_minutes: number | null;
   last_successful_scan_at: string | null;
   revision: number;
+}
+
+// Merge-patch body: only the fields being changed are sent.
+export interface LocationPatch {
+  name?: string;
+  display_root?: string | null;
+  enabled?: boolean;
+  external_generation_policy?: "allow" | "deny";
+  scan_interval_minutes?: number | null;
+}
+
+export interface LocationTestResult {
+  ok: boolean;
+  checks: { name: string; ok: boolean; detail: string }[];
 }
 
 export type PathStyle = "linux" | "windows" | "unc" | "mapped_drive";
@@ -85,25 +102,68 @@ export interface PickedFolder {
   path_style: PathStyle | null;
 }
 
+export type JobStatus =
+  "queued" | "running" | "retry_wait" | "succeeded" | "failed" | "cancelled" | "superseded";
+
+export interface JobProgress {
+  phase: string | null;
+  current: number;
+  total: number | null;
+  unit: string;
+  updated_at: string | null;
+  detail: ScanProgressDetail | null;
+}
+
+// Persisted scan breakdown (Phase 9) + the live index-child aggregate that
+// GET /jobs/{id} merges in for scan_location jobs.
+export interface ScanProgressDetail {
+  phase?: string;
+  discovered?: number;
+  scanned?: number;
+  target?: number;
+  changed?: number;
+  moved?: number;
+  restored?: number;
+  missing?: number;
+  unchanged?: number;
+  metadata?: number;
+  index_enqueued?: number;
+}
+
+export interface ScanSummary extends ScanProgressDetail {
+  indexed: number;
+  index_failed: number;
+  index_remaining: number;
+  index_total: number;
+}
+
 export interface Job {
   id: string;
   job_type: string;
-  status: string;
+  status: JobStatus;
+  progress: JobProgress;
   attempt_count: number;
   max_attempts: number;
   requested_at: string;
+  started_at: string | null;
   finished_at: string | null;
+  cancel_requested_at: string | null;
+  retry_of_job_id: string | null;
+  root_job_id: string | null;
   target: { resource_type: string; resource_id: string } | null;
   error: { code: string; message: string; retryable: boolean } | null;
+  // Only present on GET /jobs/{id} for scan_location jobs.
+  scan_summary?: ScanSummary;
+}
+
+export interface JobFilters {
+  status?: JobStatus[];
+  job_type?: string[];
+  source_location_id?: string;
 }
 
 export type DocumentState =
-  | "discovered"
-  | "queued"
-  | "indexed"
-  | "failed"
-  | "missing"
-  | "unsupported";
+  "discovered" | "queued" | "indexed" | "failed" | "missing" | "unsupported";
 
 export interface DocumentContentObject {
   id: string;
@@ -147,8 +207,48 @@ async function apiFetch<T>(path: string, init?: RequestInit): Promise<T> {
   return (await resp.json()) as T;
 }
 
+// Idempotency-Key: 32 hex chars (no dashes), one per job-creating request.
+function idemKey(): string {
+  return crypto.randomUUID().replaceAll("-", "");
+}
+
+function locationEtag(location: Pick<SourceLocation, "id" | "revision">): string {
+  return `"location-${location.id}-${location.revision}"`;
+}
+
 export async function fetchLocations(): Promise<Collection<SourceLocation>> {
   return apiFetch("/api/v1/locations");
+}
+
+export async function patchLocation(
+  location: Pick<SourceLocation, "id" | "revision">,
+  patch: LocationPatch,
+): Promise<SourceLocation> {
+  const result = await apiFetch<Resource<SourceLocation>>(`/api/v1/locations/${location.id}`, {
+    method: "PATCH",
+    headers: {
+      "Content-Type": "application/merge-patch+json",
+      "If-Match": locationEtag(location),
+    },
+    body: JSON.stringify(patch),
+  });
+  return result.data;
+}
+
+export async function reindexLocation(locationId: string): Promise<Job> {
+  const result = await apiFetch<Resource<Job>>(`/api/v1/locations/${locationId}/reindex`, {
+    method: "POST",
+    headers: { "Idempotency-Key": idemKey() },
+  });
+  return result.data;
+}
+
+export async function testLocation(locationId: string): Promise<LocationTestResult> {
+  const result = await apiFetch<Resource<LocationTestResult>>(
+    `/api/v1/locations/${locationId}/test`,
+    { method: "POST" },
+  );
+  return result.data;
 }
 
 export async function browseDirectory(
@@ -209,8 +309,35 @@ export async function requestLocationScan(locationId: string): Promise<Job> {
   return result.data;
 }
 
-export async function fetchJobs(): Promise<Collection<Job>> {
-  return apiFetch("/api/v1/jobs");
+export async function fetchJobs(filters?: JobFilters): Promise<Collection<Job>> {
+  const params = new URLSearchParams();
+  for (const s of filters?.status ?? []) params.append("filter[status]", s);
+  for (const t of filters?.job_type ?? []) params.append("filter[job_type]", t);
+  if (filters?.source_location_id) {
+    params.set("filter[source_location_id]", filters.source_location_id);
+  }
+  const query = params.toString();
+  return apiFetch(`/api/v1/jobs${query ? `?${query}` : ""}`);
+}
+
+export async function fetchJob(jobId: string): Promise<Job> {
+  const result = await apiFetch<Resource<Job>>(`/api/v1/jobs/${jobId}`);
+  return result.data;
+}
+
+export async function cancelJob(jobId: string): Promise<Job> {
+  const result = await apiFetch<Resource<Job>>(`/api/v1/jobs/${jobId}/cancel`, {
+    method: "POST",
+  });
+  return result.data;
+}
+
+export async function retryJob(jobId: string): Promise<Job> {
+  const result = await apiFetch<Resource<Job>>(`/api/v1/jobs/${jobId}/retry`, {
+    method: "POST",
+    headers: { "Idempotency-Key": idemKey() },
+  });
+  return result.data;
 }
 
 export async function fetchDocuments(state?: DocumentState): Promise<Collection<DocumentSummary>> {
@@ -367,7 +494,12 @@ export interface AskResultData {
   status: "completed" | "insufficient_evidence" | "refused" | "external_confirmation_required";
   answer: string | null;
   answer_format: string;
-  provider: { provider_id: string; model_id: string | null; data_boundary: DataBoundary; invoked: boolean };
+  provider: {
+    provider_id: string;
+    model_id: string | null;
+    data_boundary: DataBoundary;
+    invoked: boolean;
+  };
   data_boundary: {
     classification: DataBoundary;
     external_transfer_occurred: boolean;
@@ -376,7 +508,11 @@ export interface AskResultData {
   retrieval: { candidate_count: number; selected_evidence_count: number; sufficient: boolean };
   citations: AskCitation[];
   finish_reason: string | null;
-  usage: { input_tokens: number | null; output_tokens: number | null; total_tokens: number | null } | null;
+  usage: {
+    input_tokens: number | null;
+    output_tokens: number | null;
+    total_tokens: number | null;
+  } | null;
   timing: { retrieval_ms: number; generation_ms: number | null; total_ms: number };
   warnings: string[];
   confirmation?: {

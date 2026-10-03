@@ -1,11 +1,6 @@
 import { FormEvent, useState } from "react";
 import { useMutation, useQuery } from "@tanstack/react-query";
-import {
-  SearchHit,
-  SearchRequest,
-  fetchLocations,
-  search,
-} from "../api/client";
+import { SearchHit, SearchRequest, fetchLocations, search } from "../api/client";
 
 function pageLabel(hit: SearchHit): string {
   if (hit.page_start === null) return "";

@@ -1,11 +1,6 @@
 import { useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import {
-  DocumentState,
-  DocumentSummary,
-  fetchDocuments,
-  reindexDocument,
-} from "../api/client";
+import { DocumentState, DocumentSummary, fetchDocuments, reindexDocument } from "../api/client";
 
 const STATE_FILTERS: { value: DocumentState | "all"; label: string }[] = [
   { value: "all", label: "All" },
@@ -67,7 +62,9 @@ export function DocumentsPage() {
       {documents.isError && (
         <p className="error">Unable to load documents: {String(documents.error)}</p>
       )}
-      {documents.data?.data.length === 0 && <p className="empty">No documents match this filter.</p>}
+      {documents.data?.data.length === 0 && (
+        <p className="empty">No documents match this filter.</p>
+      )}
       {documents.data && documents.data.data.length > 0 && (
         <table className="resources">
           <thead>

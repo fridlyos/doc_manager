@@ -9,9 +9,7 @@ function mockFetch(hit: unknown) {
   return vi.spyOn(globalThis, "fetch").mockImplementation((url: string | URL | Request) => {
     const href = String(url);
     if (href.includes("/api/v1/locations")) {
-      return Promise.resolve(
-        new Response(JSON.stringify({ data: [], page: {} }), { status: 200 }),
-      );
+      return Promise.resolve(new Response(JSON.stringify({ data: [], page: {} }), { status: 200 }));
     }
     // /api/v1/search
     return Promise.resolve(

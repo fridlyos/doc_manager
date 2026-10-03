@@ -20,7 +20,9 @@ export function ErrorsPage() {
   return (
     <section>
       <h2>Errors</h2>
-      <p className="notice">Documents whose latest indexing attempt failed. Errors are isolated per document.</p>
+      <p className="notice">
+        Documents whose latest indexing attempt failed. Errors are isolated per document.
+      </p>
       {reindex.isError && <p className="error">Reindex failed: {String(reindex.error)}</p>}
       {reindex.isSuccess && <p className="notice">Reindex queued.</p>}
       {errors.isLoading && <p>Loading errors…</p>}
