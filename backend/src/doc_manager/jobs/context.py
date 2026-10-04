@@ -73,3 +73,15 @@ class JobContext:
         await self.session.commit()
         if not ok:
             self.lease_lost = True
+
+    async def report_progress_detail(self, detail: dict[str, object]) -> None:
+        """Best-effort rich progress breakdown (Phase 9). Observability only: a
+        lost-lease rejection is ignored (the fenced work still owns correctness)."""
+        await self.engine.update_progress_detail(
+            self.session,
+            job_id=self.job.id,
+            worker_id=self.worker_id,
+            lease_token=self.lease_token,
+            detail=detail,
+        )
+        await self.session.commit()

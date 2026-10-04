@@ -127,6 +127,9 @@ class Settings(BaseSettings):
     # abandoned staging / idempotency rows, and the age after which they qualify.
     maintenance_interval_seconds: float = 3600.0
     maintenance_retention_hours: int = 24
+    # Scan progress (Phase 9): the UI's initial `scanned / target` denominator for a
+    # scan, used until the real discovered total is known. Raise for larger corpora.
+    scan_target_files: int = 10_000
     chunk_target_tokens: int = 750
     chunk_overlap_tokens: int = 100
     search_top_k: int = 12

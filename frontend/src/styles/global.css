@@ -5,7 +5,8 @@
   --muted: #9aa2ad;
   --up: #3fb950;
   --down: #f85149;
-  --disabled: #6e7681;
+  /* Lightened from #6e7681 to clear WCAG AA (4.5:1) for small text (8.i). */
+  --disabled: #8b949e;
 }
 
 * {
@@ -63,6 +64,25 @@ body {
 .app-main {
   padding: 1.5rem;
   max-width: 1100px;
+}
+
+/* Responsive (Phase 9): header + nav wrap on narrow viewports; wide tables scroll
+   within main rather than forcing the page body to scroll horizontally. */
+.app-header {
+  flex-wrap: wrap;
+}
+@media (max-width: 720px) {
+  .app-header nav {
+    margin-left: 0;
+    flex-wrap: wrap;
+  }
+  .app-main {
+    overflow-x: auto;
+  }
+  table.resources,
+  table.components {
+    min-width: 40rem;
+  }
 }
 
 .status-meta {
@@ -296,9 +316,135 @@ code {
   text-decoration: underline;
 }
 
+/* Reusable primitives (Phase 9) */
+.progressbar {
+  position: relative;
+  height: 1.25rem;
+  background: var(--bg);
+  border: 1px solid #343a46;
+  border-radius: 0.3rem;
+  overflow: hidden;
+}
+.progressbar-fill {
+  height: 100%;
+  background: #293249;
+  transition: width 0.3s ease;
+}
+.progressbar-text {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 0.75rem;
+  font-variant-numeric: tabular-nums;
+  color: var(--text);
+}
+
+.counts-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+  margin: 0.75rem 0;
+}
+.count-tile {
+  min-width: 5.5rem;
+  padding: 0.4rem 0.6rem;
+  background: var(--bg);
+  border: 1px solid #22262e;
+  border-radius: 0.4rem;
+}
+.count-tile dt {
+  font-size: 0.7rem;
+  color: var(--muted);
+}
+.count-tile dd {
+  margin: 0.1rem 0 0;
+  font-size: 1.1rem;
+  font-variant-numeric: tabular-nums;
+}
+.count-tile.tone-up dd {
+  color: var(--up);
+}
+.count-tile.tone-down dd {
+  color: var(--down);
+}
+.count-tile.tone-warn dd {
+  color: #d29922;
+}
+.count-tile.tone-muted dd {
+  color: var(--muted);
+}
+
+button.danger {
+  color: var(--down);
+  border-color: var(--down);
+}
+
+.row-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.35rem;
+}
+
+.scan-progress {
+  margin-top: 0.5rem;
+  padding: 0.6rem;
+  background: var(--bg);
+  border: 1px solid #22262e;
+  border-radius: 0.4rem;
+}
+.scan-progress-head {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  margin-bottom: 0.4rem;
+}
+.scan-progress-head .muted {
+  color: var(--muted);
+  font-size: 0.8rem;
+}
+.schedule {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.4rem;
+  color: var(--muted);
+  font-size: 0.85rem;
+}
+.schedule input {
+  width: 5rem;
+  min-width: 0;
+}
+
+.skip-link {
+  position: absolute;
+  left: -999px;
+  top: 0;
+  padding: 0.5rem 0.75rem;
+  background: var(--panel);
+  z-index: 200;
+}
+.skip-link:focus {
+  left: 0.5rem;
+  top: 0.5rem;
+}
+
 .status {
   font-size: 0.8rem;
   text-transform: capitalize;
+}
+.status-running,
+.status-building {
+  color: #d29922;
+}
+.status-succeeded,
+.status-ready {
+  color: var(--up);
+}
+.status-cancelled,
+.status-superseded,
+.status-retry_wait {
+  color: var(--disabled);
 }
 .status-indexed {
   color: var(--up);

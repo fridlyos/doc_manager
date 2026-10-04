@@ -39,8 +39,17 @@ const RESULT = {
   status: "completed",
   answer: "It renews in December [1].",
   answer_format: "markdown",
-  provider: { provider_id: "ollama", model_id: "llama3.1:8b", data_boundary: "local", invoked: true },
-  data_boundary: { classification: "local", external_transfer_occurred: false, external_payload: {} },
+  provider: {
+    provider_id: "ollama",
+    model_id: "llama3.1:8b",
+    data_boundary: "local",
+    invoked: true,
+  },
+  data_boundary: {
+    classification: "local",
+    external_transfer_occurred: false,
+    external_payload: {},
+  },
   retrieval: { candidate_count: 5, selected_evidence_count: 1, sufficient: true },
   citations: [
     {
@@ -80,7 +89,8 @@ function renderPage() {
 
 test("loads providers and shows the Local boundary badge", async () => {
   vi.spyOn(globalThis, "fetch").mockImplementation((url) => {
-    if (String(url).includes("/system/providers")) return Promise.resolve(providersResponse() as Response);
+    if (String(url).includes("/system/providers"))
+      return Promise.resolve(providersResponse() as Response);
     return Promise.resolve(streamResponse("") as Response);
   });
   renderPage();
@@ -98,7 +108,8 @@ test("streams deltas then reconciles the final answer and citation", async () =>
     { event: "ask.result", data: { data: RESULT } },
   );
   vi.spyOn(globalThis, "fetch").mockImplementation((url) => {
-    if (String(url).includes("/system/providers")) return Promise.resolve(providersResponse() as Response);
+    if (String(url).includes("/system/providers"))
+      return Promise.resolve(providersResponse() as Response);
     return Promise.resolve(streamResponse(sse) as Response);
   });
   renderPage();
@@ -120,12 +131,18 @@ test("external confirmation prompts, then resends with acknowledgement", async (
     ...RESULT,
     status: "external_confirmation_required",
     answer: null,
-    provider: { ...RESULT.provider, provider_id: "openai", data_boundary: "external", invoked: false },
+    provider: {
+      ...RESULT.provider,
+      provider_id: "openai",
+      data_boundary: "external",
+      invoked: false,
+    },
     confirmation: { provider_id: "openai", evidence_blocks: 2, evidence_characters: 900 },
   };
   const calls: RequestInit[] = [];
   vi.spyOn(globalThis, "fetch").mockImplementation((url, init) => {
-    if (String(url).includes("/system/providers")) return Promise.resolve(providersResponse() as Response);
+    if (String(url).includes("/system/providers"))
+      return Promise.resolve(providersResponse() as Response);
     calls.push(init as RequestInit);
     const body = calls.length === 1 ? confirmResult : RESULT;
     return Promise.resolve(
@@ -158,7 +175,8 @@ test("renders an ask.error", async () => {
     data: { problem: { detail: "The selected provider did not finish in time." } },
   });
   vi.spyOn(globalThis, "fetch").mockImplementation((url) => {
-    if (String(url).includes("/system/providers")) return Promise.resolve(providersResponse() as Response);
+    if (String(url).includes("/system/providers"))
+      return Promise.resolve(providersResponse() as Response);
     return Promise.resolve(streamResponse(sse) as Response);
   });
   renderPage();

@@ -99,7 +99,11 @@ test("compare posts source + target to create a plan", async () => {
     const href = String(url);
     if (href.includes("/locations")) return Promise.resolve(locations());
     if (init?.method === "POST") {
-      return Promise.resolve({ ok: true, status: 202, json: async () => ({ data: PLAN }) } as Response);
+      return Promise.resolve({
+        ok: true,
+        status: 202,
+        json: async () => ({ data: PLAN }),
+      } as Response);
     }
     return Promise.resolve(plans([]));
   });

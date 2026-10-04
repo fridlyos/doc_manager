@@ -7,7 +7,7 @@ from datetime import datetime
 from typing import Annotated, Any
 
 from fastapi import APIRouter, Depends, Request, Response
-from sqlalchemy import select
+from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from doc_manager.api.dependencies import (
@@ -43,6 +43,16 @@ _ROUTE = "/api/v1/jobs"
 _FILTERS: dict[str, set[str] | None] = {
     "status": {s.value for s in JobStatus},
     "job_type": {t.value for t in JobType},
+    # Arbitrary UUID values (validated when applied) — lets the UI find a
+    # location's current/last scan (Phase 9).
+    "source_location_id": None,
+}
+
+#: Index-file child statuses the scan-progress view rolls up as "still working".
+_INDEX_REMAINING = {
+    JobStatus.queued.value,
+    JobStatus.running.value,
+    JobStatus.retry_wait.value,
 }
 
 
@@ -51,6 +61,26 @@ async def _load_job(session: AsyncSession, job_id: str) -> IngestionJob:
     if job is None:
         raise Problem(404, "not_found", "No such job.")
     return job
+
+
+async def _scan_summary(session: AsyncSession, job: IngestionJob) -> dict[str, Any]:
+    """Merge the scan's persisted breakdown with a live aggregate of its
+    ``index_file`` children (linked by ``root_job_id``) for the progress view."""
+    rows = await session.execute(
+        select(IngestionJob.status, func.count())
+        .where(
+            IngestionJob.root_job_id == job.id,
+            IngestionJob.job_type == JobType.index_file.value,
+        )
+        .group_by(IngestionJob.status)
+    )
+    by_status: dict[str, int] = {row[0]: row[1] for row in rows.all()}
+    summary: dict[str, Any] = dict(job.progress_detail_json or {})
+    summary["indexed"] = by_status.get(JobStatus.succeeded.value, 0)
+    summary["index_failed"] = by_status.get(JobStatus.failed.value, 0)
+    summary["index_remaining"] = sum(by_status.get(s, 0) for s in _INDEX_REMAINING)
+    summary["index_total"] = sum(by_status.values())
+    return summary
 
 
 @router.get("")
@@ -73,6 +103,14 @@ async def list_jobs(
         stmt = stmt.where(IngestionJob.status.in_(filters["status"]))
     if "job_type" in filters:
         stmt = stmt.where(IngestionJob.job_type.in_(filters["job_type"]))
+    if "source_location_id" in filters:
+        try:
+            location_ids = [uuid.UUID(v) for v in filters["source_location_id"]]
+        except ValueError as exc:
+            raise Problem(
+                422, "validation_failed", "filter[source_location_id] must be a UUID."
+            ) from exc
+        stmt = stmt.where(IngestionJob.source_location_id.in_(location_ids))
     cursor = request.query_params.get("cursor")
     if cursor:
         raw_value, last_id = decode_cursor(
@@ -126,7 +164,10 @@ async def get_job(
     session: Annotated[AsyncSession, Depends(get_session)],
 ) -> dict[str, Any]:
     job = await _load_job(session, job_id)
-    return envelope(request, serialize_job(job))
+    data = serialize_job(job)
+    if job.job_type == JobType.scan_location.value:
+        data["scan_summary"] = await _scan_summary(session, job)
+    return envelope(request, data)
 
 
 @router.post("/{job_id}/cancel")

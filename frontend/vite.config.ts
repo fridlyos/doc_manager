@@ -24,5 +24,7 @@ export default defineConfig({
     environment: "jsdom",
     globals: true,
     setupFiles: ["./src/test/setup.ts"],
+    // Unit/component tests only; the Playwright E2E specs under e2e/ run separately.
+    include: ["src/**/*.{test,spec}.{ts,tsx}"],
   },
 });

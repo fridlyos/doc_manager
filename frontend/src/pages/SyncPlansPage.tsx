@@ -23,7 +23,11 @@ export function SyncPlansPage() {
   const [openPlan, setOpenPlan] = useState<string | null>(null);
 
   const locations = useQuery({ queryKey: ["locations"], queryFn: fetchLocations });
-  const plans = useQuery({ queryKey: ["sync-plans"], queryFn: fetchSyncPlans, refetchInterval: 5_000 });
+  const plans = useQuery({
+    queryKey: ["sync-plans"],
+    queryFn: fetchSyncPlans,
+    refetchInterval: 5_000,
+  });
 
   const nameOf = useMemo(() => {
     const map = new Map((locations.data?.data ?? []).map((l) => [l.id, l.name]));
@@ -72,7 +76,10 @@ export function SyncPlansPage() {
             ))}
           </select>
         </label>
-        <button type="submit" disabled={create.isPending || !source || !target || source === target}>
+        <button
+          type="submit"
+          disabled={create.isPending || !source || !target || source === target}
+        >
           {create.isPending ? "Building…" : "Compare"}
         </button>
       </form>

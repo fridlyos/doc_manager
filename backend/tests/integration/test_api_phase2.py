@@ -275,6 +275,32 @@ def test_jobs_list_get_cancel(client: TestClient, tmp_path: Path) -> None:
     assert not_retryable.json()["code"] == "job_not_retryable"
 
 
+def test_jobs_filter_by_source_location_and_scan_summary(
+    client: TestClient, tmp_path: Path
+) -> None:
+    # Phase 9: the UI finds a location's scan via filter[source_location_id], and a
+    # scan_location job detail carries a scan_summary + the progress breakdown fields.
+    root = make_root(tmp_path, "scanprog")
+    created = client.post("/api/v1/locations", json=location_body(root)).json()["data"]
+    job = client.post(
+        f"/api/v1/locations/{created['id']}/scan", headers={"Idempotency-Key": idem()}
+    ).json()["data"]
+
+    filtered = client.get(f"/api/v1/jobs?filter[source_location_id]={created['id']}")
+    assert filtered.status_code == 200
+    assert [j["id"] for j in filtered.json()["data"]] == [job["id"]]
+
+    assert client.get("/api/v1/jobs?filter[source_location_id]=not-a-uuid").status_code == 422
+
+    detail = client.get(f"/api/v1/jobs/{job['id']}").json()["data"]
+    # New progress fields are always present (detail null until the scan runs).
+    assert "updated_at" in detail["progress"]
+    assert "detail" in detail["progress"]
+    # scan_location jobs expose a scan_summary; no children enqueued yet (queued).
+    assert detail["scan_summary"]["indexed"] == 0
+    assert detail["scan_summary"]["index_total"] == 0
+
+
 def test_request_id_header_contract(client: TestClient) -> None:
     ok = client.get("/api/v1/jobs")
     assert ok.status_code == 200

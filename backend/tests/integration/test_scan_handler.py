@@ -120,6 +120,39 @@ async def test_scan_happy_path(
         assert staged == []
 
 
+async def test_scan_reports_progress_breakdown(
+    tmp_path: Path,
+    db_engine: AsyncEngine,
+    session_factory: async_sessionmaker[AsyncSession],
+) -> None:
+    # Phase 9: a completed scan persists the discovered/scanned/target breakdown,
+    # and its index_file children (linked by root_job_id) aggregate into scan_summary.
+    from doc_manager.api.v1.routes.jobs import _scan_summary
+
+    build_corpus(tmp_path)
+    async with session_factory() as session:
+        location = await create_location(session, tmp_path)
+    job = await run_scan(db_engine, session_factory, location.id)
+
+    async with session_factory() as session:
+        fresh = await session.get(IngestionJob, job.id)
+        assert fresh is not None
+        detail = fresh.progress_detail_json
+        assert detail is not None
+        assert detail["phase"] == "reconciled"
+        assert detail["discovered"] == 3  # a.pdf, b.txt, notes.md (ignore.tmp excluded)
+        assert detail["scanned"] == 3
+        assert detail["target"] == 10_000  # max(config default, discovered)
+        assert detail["index_enqueued"] == 3
+
+        # Children were enqueued (root_job_id == scan id) but not drained → all remaining.
+        summary = await _scan_summary(session, fresh)
+        assert summary["indexed"] == 0
+        assert summary["index_remaining"] == 3
+        assert summary["index_total"] == 3
+        assert summary["discovered"] == 3  # merged from the persisted detail
+
+
 async def test_scan_missing_and_restore(
     tmp_path: Path,
     db_engine: AsyncEngine,

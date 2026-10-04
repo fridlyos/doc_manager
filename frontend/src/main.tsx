@@ -15,7 +15,11 @@ import { CoveragePage } from "./pages/CoveragePage";
 import { SyncPlansPage } from "./pages/SyncPlansPage";
 import "./styles/global.css";
 
-const queryClient = new QueryClient();
+const queryClient = new QueryClient({
+  // Pause polling while the tab is hidden (Phase 9): no background churn, and
+  // the next focus refetches fresh state.
+  defaultOptions: { queries: { refetchIntervalInBackground: false } },
+});
 
 const router = createBrowserRouter([
   {
