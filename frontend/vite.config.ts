@@ -10,6 +10,11 @@ import react from "@vitejs/plugin-react";
 //   - containerized ui service -> API_PROXY_TARGET=http://api:8000 (compose net)
 const apiProxyTarget = process.env.API_PROXY_TARGET ?? "http://127.0.0.1:8000";
 
+// Windows/WSL bind mounts into a Linux container do not forward inotify events,
+// so HMR needs filesystem polling. Opt-in via env (set on the containerized ui
+// service) to keep native `npm run dev` fast. See compose.override.yaml.
+const usePolling = process.env.VITE_USE_POLLING === "true";
+
 export default defineConfig({
   plugins: [react()],
   server: {
@@ -19,6 +24,7 @@ export default defineConfig({
       "/api": { target: apiProxyTarget, changeOrigin: true },
       "/health": { target: apiProxyTarget, changeOrigin: true },
     },
+    watch: usePolling ? { usePolling: true, interval: 300 } : undefined,
   },
   test: {
     environment: "jsdom",

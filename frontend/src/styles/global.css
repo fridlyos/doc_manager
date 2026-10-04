@@ -657,3 +657,105 @@ button.danger {
 .status-failed {
   color: var(--down);
 }
+
+.pipeline-diagram {
+  width: 100%;
+  max-width: 900px;
+  height: auto;
+  margin: 1rem 0 1.5rem;
+}
+.pipeline-box {
+  fill: var(--panel);
+  stroke: #2b3038;
+}
+.pipeline-box-output {
+  stroke: var(--up);
+}
+.pipeline-label {
+  fill: var(--text);
+  font-size: 13px;
+  font-weight: 600;
+}
+.pipeline-detail {
+  fill: var(--muted);
+  font-size: 11px;
+}
+.pipeline-arrow {
+  fill: none;
+  stroke: var(--muted);
+  stroke-width: 1.5;
+  marker-end: url(#tutorial-arrowhead);
+}
+.pipeline-arrowhead {
+  fill: var(--muted);
+}
+
+.tutorial-steps {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: grid;
+  gap: 0.75rem;
+}
+.tutorial-step {
+  background: var(--panel);
+  border: 1px solid #22262e;
+  border-radius: 0.5rem;
+  padding: 0.75rem 1rem;
+}
+.tutorial-step h4 {
+  margin: 0 0 0.25rem;
+}
+.tutorial-step p {
+  margin: 0 0 0.5rem;
+  color: var(--muted);
+}
+
+.tutorial-concepts {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(240px, 1fr));
+  gap: 0.75rem;
+}
+.tutorial-concept {
+  background: var(--panel);
+  border: 1px solid #22262e;
+  border-radius: 0.5rem;
+  padding: 0.75rem 1rem;
+}
+.tutorial-concept h4 {
+  margin: 0 0 0.25rem;
+}
+.tutorial-concept p {
+  margin: 0;
+  color: var(--muted);
+}
+
+.home h3 {
+  margin-top: 1.5rem;
+}
+.home-status-strip a {
+  color: var(--text);
+}
+.home-actions {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
+  gap: 0.75rem;
+}
+.home-action {
+  display: flex;
+  flex-direction: column;
+  gap: 0.25rem;
+  background: var(--panel);
+  border: 1px solid #2b3038;
+  border-radius: 0.5rem;
+  padding: 0.85rem 1rem;
+  text-decoration: none;
+  color: var(--text);
+}
+.home-action:hover {
+  border-color: var(--text);
+}
+.home-action span {
+  color: var(--muted);
+  font-size: 0.85rem;
+}
