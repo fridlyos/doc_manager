@@ -130,13 +130,14 @@ test("browse picker (web fallback) fills the scan-root input", async () => {
     const url = String(input);
     if (url.includes("/capabilities")) return capabilities(false); // web modal path
     if (url.includes("/browse")) {
-      if (url.includes("path=")) {
+      // The picker opens directly on the host drive (/hostfs).
+      if (url.includes("path=%2Fhostfs") || url.includes("path=/hostfs")) {
         return json({
           data: {
-            path: "/sources",
+            path: "/hostfs",
             path_style: "linux",
             parent: null,
-            entries: [{ name: "nas", path: "/sources/nas", kind: "dir" }],
+            entries: [{ name: "Users", path: "/hostfs/Users", kind: "dir" }],
           },
           meta: {},
         });
@@ -146,7 +147,10 @@ test("browse picker (web fallback) fills the scan-root input", async () => {
           path: null,
           path_style: "linux",
           parent: null,
-          entries: [{ name: "/sources", path: "/sources", kind: "dir" }],
+          entries: [
+            { name: "/hostfs", path: "/hostfs", kind: "dir" },
+            { name: "/sources", path: "/sources", kind: "dir" },
+          ],
         },
         meta: {},
       });
@@ -159,11 +163,12 @@ test("browse picker (web fallback) fills the scan-root input", async () => {
 
   await screen.findByText("No locations configured.");
   fireEvent.click(screen.getByRole("button", { name: "Browse…" }));
-  fireEvent.click(await screen.findByRole("button", { name: /\/sources/ }));
+  // Picker opens on /hostfs; descend into a folder and select it.
+  fireEvent.click(await screen.findByRole("button", { name: /Users/ }));
   fireEvent.click(screen.getByRole("button", { name: "Select this folder" }));
 
   await waitFor(() =>
-    expect((screen.getByLabelText("Scan root") as HTMLInputElement).value).toBe("/sources"),
+    expect((screen.getByLabelText("Scan root") as HTMLInputElement).value).toBe("/hostfs/Users"),
   );
   expect(screen.queryByRole("dialog")).toBeNull();
 });

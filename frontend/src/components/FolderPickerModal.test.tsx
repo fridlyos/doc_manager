@@ -19,62 +19,83 @@ function renderModal(onSelect = vi.fn(), onClose = vi.fn()) {
   return { onSelect, onClose };
 }
 
-test("navigates into a directory and selects it", async () => {
+test("opens on the host drive, navigates into a directory and selects it", async () => {
   const fetchMock = vi.spyOn(globalThis, "fetch");
-  // Initial roots listing.
+  // The modal opens directly on /hostfs (the Windows/host drive).
   fetchMock.mockResolvedValueOnce(
     browseResponse({
-      path: null,
-      path_style: "linux",
-      parent: null,
-      entries: [{ name: "/sources", path: "/sources", kind: "dir" }],
-    }),
-  );
-  // After descending into /sources.
-  fetchMock.mockResolvedValueOnce(
-    browseResponse({
-      path: "/sources",
+      path: "/hostfs",
       path_style: "linux",
       parent: null,
       entries: [
-        { name: "nas", path: "/sources/nas", kind: "dir" },
-        { name: "readme.md", path: "/sources/readme.md", kind: "file" },
+        { name: "Users", path: "/hostfs/Users", kind: "dir" },
+        { name: "pagefile.sys", path: "/hostfs/pagefile.sys", kind: "file" },
       ],
+    }),
+  );
+  // After descending into Users.
+  fetchMock.mockResolvedValueOnce(
+    browseResponse({
+      path: "/hostfs/Users",
+      path_style: "linux",
+      parent: "/hostfs",
+      entries: [{ name: "fridl", path: "/hostfs/Users/fridl", kind: "dir" }],
     }),
   );
 
   const { onSelect, onClose } = renderModal();
 
-  fireEvent.click(await screen.findByRole("button", { name: /\/sources/ }));
-
   // File row is not a button (non-navigable).
-  expect(await screen.findByText(/nas/)).toBeInTheDocument();
-  expect(screen.queryByRole("button", { name: /readme\.md/ })).toBeNull();
+  expect(await screen.findByText(/pagefile\.sys/)).toBeInTheDocument();
+  expect(screen.queryByRole("button", { name: /pagefile\.sys/ })).toBeNull();
 
+  fireEvent.click(await screen.findByRole("button", { name: /Users/ }));
+  expect(await screen.findByText(/fridl/)).toBeInTheDocument();
+
+  // Selecting stores the real container path, not the display string.
   fireEvent.click(screen.getByRole("button", { name: "Select this folder" }));
-  await waitFor(() => expect(onSelect).toHaveBeenCalledWith("/sources"));
+  await waitFor(() => expect(onSelect).toHaveBeenCalledWith("/hostfs/Users"));
   expect(onClose).toHaveBeenCalled();
 });
 
-test("select is disabled at the roots level", async () => {
+test("ascending to the roots disables select and shows friendly mount labels", async () => {
   const fetchMock = vi.spyOn(globalThis, "fetch");
+  // Opens on /hostfs; parent null means Up returns to the roots list.
+  fetchMock.mockResolvedValueOnce(
+    browseResponse({
+      path: "/hostfs",
+      path_style: "linux",
+      parent: null,
+      entries: [{ name: "Users", path: "/hostfs/Users", kind: "dir" }],
+    }),
+  );
+  // The roots list (currentPath === null).
   fetchMock.mockResolvedValueOnce(
     browseResponse({
       path: null,
       path_style: "linux",
       parent: null,
-      entries: [{ name: "/sources", path: "/sources", kind: "dir" }],
+      entries: [
+        { name: "/hostfs", path: "/hostfs", kind: "dir" },
+        { name: "/sources", path: "/sources", kind: "dir" },
+      ],
     }),
   );
+
   renderModal();
-  await screen.findByRole("button", { name: /\/sources/ });
+  // Wait for the initial /hostfs listing, then ascend to the roots.
+  await screen.findByRole("button", { name: /Users/ });
+  fireEvent.click(screen.getByRole("button", { name: /↑ Up/ }));
+
+  // Mount roots render with friendly labels, not the raw /hostfs path.
+  expect(await screen.findByRole("button", { name: /Windows \/ host drive/ })).toBeInTheDocument();
   expect(screen.getByRole("button", { name: "Select this folder" })).toBeDisabled();
 });
 
 test("Escape closes the modal", async () => {
   const fetchMock = vi.spyOn(globalThis, "fetch");
   fetchMock.mockResolvedValueOnce(
-    browseResponse({ path: null, path_style: "linux", parent: null, entries: [] }),
+    browseResponse({ path: "/hostfs", path_style: "linux", parent: null, entries: [] }),
   );
   const { onClose } = renderModal();
   await screen.findByText("No folders here.");

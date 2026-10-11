@@ -9,9 +9,34 @@ interface FolderPickerModalProps {
   onClose: () => void;
 }
 
+// The host-drive bind mount. On Windows this exposes C:\ (or whatever
+// DOCMAN_WINDOWS_HOST_PATH points at); on Linux it is the Compose working dir.
+const HOSTFS = "/hostfs";
+
+// Friendly names for the two top-level mounts so the browser reads like the
+// host, not container internals.
+function rootLabel(name: string): string {
+  if (name === HOSTFS) return "Windows / host drive";
+  if (name === "/sources") return "Indexed source mounts";
+  return name;
+}
+
+// Display a container path the way the host would show it: paths under /hostfs
+// render as the host drive with backslashes. The real posix path is still what
+// gets stored as the scan root — this is presentation only.
+function displayPath(p: string | null): string {
+  if (p === null) return "This PC";
+  if (p === HOSTFS) return "Windows / host drive";
+  if (p.startsWith(HOSTFS + "/")) {
+    return "Windows / host drive\\" + p.slice(HOSTFS.length + 1).replaceAll("/", "\\");
+  }
+  return p;
+}
+
 export function FolderPickerModal({ pathStyle, onSelect, onClose }: FolderPickerModalProps) {
-  // null = the synthetic top level listing the configured source roots.
-  const [currentPath, setCurrentPath] = useState<string | null>(null);
+  // Open straight into the host drive (where a Windows user's folders live)
+  // rather than the container mount list. "Up" from here returns to the roots.
+  const [currentPath, setCurrentPath] = useState<string | null>(HOSTFS);
 
   const browse = useQuery({
     queryKey: ["locations", "browse", currentPath, pathStyle],
@@ -32,7 +57,7 @@ export function FolderPickerModal({ pathStyle, onSelect, onClose }: FolderPicker
         <button type="button" disabled={!canAscend} onClick={ascend}>
           ↑ Up
         </button>
-        <code>{currentPath ?? "Source roots"}</code>
+        <code>{displayPath(currentPath)}</code>
         <button type="button" onClick={onClose}>
           ✕
         </button>
@@ -51,7 +76,7 @@ export function FolderPickerModal({ pathStyle, onSelect, onClose }: FolderPicker
                   className="folder-picker-entry dir"
                   onClick={() => setCurrentPath(entry.path)}
                 >
-                  📁 {entry.name}
+                  📁 {currentPath === null ? rootLabel(entry.name) : entry.name}
                 </button>
               ) : (
                 <span className="folder-picker-entry file">📄 {entry.name}</span>
