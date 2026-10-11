@@ -138,8 +138,13 @@ class Settings(BaseSettings):
     # RAG evidence selection (Phase 5.e): cap chunks per content object and the
     # total evidence blocks; the token budget is derived from the provider's
     # context window minus the output reservation at request time.
+    #
+    # 6 blocks keeps the prompt small enough for a local CPU model to answer in a
+    # reasonable time and cite reliably; large contexts (12+) make an 8B model on
+    # CPU take ~100s and stop emitting citation tags. Raise it for GPU/external
+    # providers where more evidence is cheap.
     ask_max_chunks_per_content: int = 3
-    ask_max_evidence_blocks: int = 12
+    ask_max_evidence_blocks: int = 6
 
     @field_validator("database_url")
     @classmethod
