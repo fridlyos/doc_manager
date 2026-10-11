@@ -25,32 +25,72 @@ body {
   color: var(--text);
 }
 
-.app-header {
-  display: flex;
-  align-items: baseline;
-  gap: 0.75rem;
-  padding: 1rem 1.5rem;
-  border-bottom: 1px solid #22262e;
+/* Left sidebar shell (Phase 11): a persistent grouped menu drives navigation.
+   The brand at the top is always the route back to the main screen. */
+.app-shell {
+  display: grid;
+  grid-template-columns: 232px minmax(0, 1fr);
+  min-height: 100vh;
 }
 
-.app-header nav {
-  display: flex;
-  gap: 0.8rem;
-  margin-left: auto;
+.sidebar {
+  background: var(--panel);
+  border-right: 1px solid #22262e;
+  padding: 1rem 0.75rem;
+  position: sticky;
+  top: 0;
+  align-self: start;
+  height: 100vh;
+  overflow-y: auto;
 }
 
-.app-header nav a {
-  color: var(--muted);
+.sidebar-brand {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  padding: 0.25rem 0.5rem 0.75rem;
   text-decoration: none;
+  border-bottom: 1px solid #22262e;
+  margin-bottom: 0.5rem;
 }
-
-.app-header nav a.active {
+.sidebar-brand-name {
+  font-size: 1.05rem;
+  font-weight: 700;
   color: var(--text);
 }
 
-.app-header h1 {
-  font-size: 1.1rem;
+.nav-group {
+  margin-top: 1rem;
+}
+.nav-group h2 {
+  font-size: 0.68rem;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: var(--muted);
+  margin: 0 0 0.3rem 0.5rem;
+  font-weight: 600;
+}
+.nav-group ul {
+  list-style: none;
   margin: 0;
+  padding: 0;
+}
+.sidebar nav a {
+  display: block;
+  padding: 0.4rem 0.6rem;
+  border-radius: 0.4rem;
+  color: var(--muted);
+  text-decoration: none;
+  font-size: 0.92rem;
+}
+.sidebar nav a:hover {
+  background: var(--bg);
+  color: var(--text);
+}
+.sidebar nav a.active {
+  background: var(--bg);
+  color: var(--text);
+  font-weight: 600;
 }
 
 .app-badge {
@@ -62,21 +102,33 @@ body {
 }
 
 .app-main {
-  padding: 1.5rem;
+  padding: 1.5rem 2rem;
   max-width: 1100px;
+  width: 100%;
 }
 
-/* Responsive (Phase 9): header + nav wrap on narrow viewports; wide tables scroll
-   within main rather than forcing the page body to scroll horizontally. */
-.app-header {
-  flex-wrap: wrap;
-}
+/* Responsive: on narrow viewports the sidebar becomes a top bar (still grouped,
+   still always showing Home) so there is always a way back to the menu. */
 @media (max-width: 720px) {
-  .app-header nav {
-    margin-left: 0;
+  .app-shell {
+    grid-template-columns: 1fr;
+  }
+  .sidebar {
+    position: static;
+    height: auto;
+    border-right: none;
+    border-bottom: 1px solid #22262e;
+  }
+  .sidebar nav {
+    display: flex;
     flex-wrap: wrap;
+    gap: 0.75rem;
+  }
+  .nav-group {
+    margin-top: 0.5rem;
   }
   .app-main {
+    padding: 1rem;
     overflow-x: auto;
   }
   table.resources,
@@ -764,26 +816,11 @@ button.danger {
 .home-status-strip a {
   color: var(--text);
 }
-.home-actions {
-  display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
-  gap: 0.75rem;
+.home-steps {
+  padding-left: 1.2rem;
+  max-width: 60ch;
 }
-.home-action {
-  display: flex;
-  flex-direction: column;
-  gap: 0.25rem;
-  background: var(--panel);
-  border: 1px solid #2b3038;
-  border-radius: 0.5rem;
-  padding: 0.85rem 1rem;
-  text-decoration: none;
-  color: var(--text);
-}
-.home-action:hover {
-  border-color: var(--text);
-}
-.home-action span {
-  color: var(--muted);
-  font-size: 0.85rem;
+.home-steps li {
+  margin-bottom: 0.5rem;
+  line-height: 1.5;
 }
