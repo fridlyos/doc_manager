@@ -340,11 +340,15 @@ export async function retryJob(jobId: string): Promise<Job> {
   return result.data;
 }
 
-export async function fetchDocuments(state?: DocumentState): Promise<Collection<DocumentSummary>> {
+export async function fetchDocuments(
+  state?: DocumentState,
+  cursor?: string,
+): Promise<Collection<DocumentSummary>> {
   const params = new URLSearchParams();
   if (state) params.set("filter[state]", state);
-  const query = params.toString();
-  return apiFetch(`/api/v1/documents${query ? `?${query}` : ""}`);
+  params.set("limit", "100");
+  if (cursor) params.set("cursor", cursor);
+  return apiFetch(`/api/v1/documents?${params.toString()}`);
 }
 
 export async function fetchErrors(): Promise<Collection<DocumentSummary>> {

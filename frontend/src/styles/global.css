@@ -471,6 +471,10 @@ button.danger {
   gap: 0.25rem;
 }
 
+.load-more {
+  margin-top: 0.75rem;
+}
+
 .scan-progress {
   margin-top: 0.5rem;
   padding: 0.6rem;
