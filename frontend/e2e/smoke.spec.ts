@@ -7,7 +7,7 @@ const SCREENS: [string, string][] = [
   ["/status", "System status"],
   ["/tutorial", "Tutorial"],
   ["/locations", "Locations"],
-  ["/ask", "Ask"],
+  ["/ask", "Chat"],
   ["/search", "Search"],
   ["/documents", "Documents"],
   ["/duplicates", "Duplicates"],
@@ -21,8 +21,9 @@ for (const [path, heading] of SCREENS) {
   test(`screen ${path} renders`, async ({ page }) => {
     await installMock(page);
     await page.goto(path);
+    // Scope to the main content: the sidebar nav group titles are also h2s.
     await expect(
-      page.getByRole("heading", { level: 2, name: new RegExp(heading, "i") }),
+      page.getByRole("main").getByRole("heading", { level: 2, name: new RegExp(heading, "i") }),
     ).toBeVisible();
   });
 }
