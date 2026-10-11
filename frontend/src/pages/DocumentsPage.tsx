@@ -1,6 +1,17 @@
-import { useState } from "react";
-import { useInfiniteQuery, useMutation, useQueryClient } from "@tanstack/react-query";
-import { DocumentState, DocumentSummary, fetchDocuments, reindexDocument } from "../api/client";
+import { useEffect, useState } from "react";
+import {
+  useInfiniteQuery,
+  useMutation,
+  useQuery,
+  useQueryClient,
+} from "@tanstack/react-query";
+import {
+  DocumentState,
+  DocumentSummary,
+  fetchDocuments,
+  fetchLocations,
+  reindexDocument,
+} from "../api/client";
 
 const STATE_FILTERS: { value: DocumentState | "all"; label: string }[] = [
   { value: "all", label: "All" },
@@ -27,12 +38,28 @@ function formatBytes(bytes: number | null): string {
 export function DocumentsPage() {
   const queryClient = useQueryClient();
   const [state, setState] = useState<DocumentState | "all">("all");
+  const [locationId, setLocationId] = useState("");
+  const [searchInput, setSearchInput] = useState("");
+  const [search, setSearch] = useState("");
   const [expanded, setExpanded] = useState<string | null>(null);
 
+  // Debounce the name search so typing doesn't fire a request per keystroke.
+  useEffect(() => {
+    const t = setTimeout(() => setSearch(searchInput.trim()), 300);
+    return () => clearTimeout(t);
+  }, [searchInput]);
+
+  const locations = useQuery({ queryKey: ["locations"], queryFn: fetchLocations });
+
   const documents = useInfiniteQuery({
-    queryKey: ["documents", state],
+    queryKey: ["documents", state, search, locationId],
     queryFn: ({ pageParam }) =>
-      fetchDocuments(state === "all" ? undefined : state, pageParam),
+      fetchDocuments({
+        state: state === "all" ? undefined : state,
+        name: search || undefined,
+        locationId: locationId || undefined,
+        cursor: pageParam,
+      }),
     initialPageParam: undefined as string | undefined,
     getNextPageParam: (last) => last.page.next_cursor ?? undefined,
     refetchInterval: 10_000,
@@ -49,6 +76,28 @@ export function DocumentsPage() {
   return (
     <section>
       <h2>Documents</h2>
+      <div className="doc-controls">
+        <input
+          className="doc-search"
+          type="search"
+          value={searchInput}
+          onChange={(e) => setSearchInput(e.target.value)}
+          placeholder="Search by file name…"
+          aria-label="Search documents by file name"
+        />
+        <select
+          value={locationId}
+          onChange={(e) => setLocationId(e.target.value)}
+          aria-label="Filter by location"
+        >
+          <option value="">All locations</option>
+          {locations.data?.data.map((loc) => (
+            <option key={loc.id} value={loc.id}>
+              {loc.name}
+            </option>
+          ))}
+        </select>
+      </div>
       <div className="filter-bar">
         {STATE_FILTERS.map((option) => (
           <button

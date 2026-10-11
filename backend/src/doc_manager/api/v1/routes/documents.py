@@ -16,7 +16,7 @@ from datetime import datetime
 from typing import Annotated, Any
 
 from fastapi import APIRouter, Depends, Request, Response
-from sqlalchemy import select
+from sqlalchemy import or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import aliased
 
@@ -68,6 +68,8 @@ _FILTERS: dict[str, set[str] | None] = {
     "state": {s.value for s in CatalogEntryState},
     "extension": None,
     "source_location_id": None,
+    # Free-text substring match on the file name (case-insensitive).
+    "name": None,
 }
 
 
@@ -118,6 +120,14 @@ async def list_documents(
         stmt = stmt.where(CatalogEntry.state.in_(filters["state"]))
     if "extension" in filters:
         stmt = stmt.where(CatalogEntry.extension.in_(filters["extension"]))
+    if "name" in filters:
+        # OR the terms within the field; escape LIKE wildcards in user input.
+        def _like(term: str) -> str:
+            return "%" + term.replace("\\", "\\\\").replace("%", "\\%").replace("_", "\\_") + "%"
+
+        stmt = stmt.where(
+            or_(*[CatalogEntry.file_name.ilike(_like(v), escape="\\") for v in filters["name"]])
+        )
     if "source_location_id" in filters:
         try:
             location_ids = [uuid.UUID(v) for v in filters["source_location_id"]]

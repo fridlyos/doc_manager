@@ -343,14 +343,22 @@ export async function retryJob(jobId: string): Promise<Job> {
   return result.data;
 }
 
+export interface DocumentQuery {
+  state?: DocumentState;
+  name?: string;
+  locationId?: string;
+  cursor?: string;
+}
+
 export async function fetchDocuments(
-  state?: DocumentState,
-  cursor?: string,
+  query: DocumentQuery = {},
 ): Promise<Collection<DocumentSummary>> {
   const params = new URLSearchParams();
-  if (state) params.set("filter[state]", state);
+  if (query.state) params.set("filter[state]", query.state);
+  if (query.name) params.set("filter[name]", query.name);
+  if (query.locationId) params.set("filter[source_location_id]", query.locationId);
   params.set("limit", "100");
-  if (cursor) params.set("cursor", cursor);
+  if (query.cursor) params.set("cursor", query.cursor);
   return apiFetch(`/api/v1/documents?${params.toString()}`);
 }
 
