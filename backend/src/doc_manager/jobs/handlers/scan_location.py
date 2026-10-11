@@ -42,7 +42,7 @@ from doc_manager.jobs.handlers.reconcile import CatalogRow, ObservedFile, reconc
 log = get_logger("doc_manager.jobs.scan_location")
 
 #: Extensions scanned when a location does not restrict them (TECHSTACK sec. 2).
-DEFAULT_INCLUDE_EXTENSIONS = frozenset({"pdf", "txt", "md", "csv", "log"})
+DEFAULT_INCLUDE_EXTENSIONS = frozenset({"pdf", "txt", "md", "csv", "docx"})
 #: Directory names never descended into, regardless of a location's globs — VCS
 #: metadata and OS/recycle/system folders that are never source documents.
 _ALWAYS_EXCLUDE_DIRS = frozenset(

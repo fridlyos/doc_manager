@@ -9,19 +9,21 @@ from __future__ import annotations
 
 from doc_manager.extraction.base import Extractor
 from doc_manager.extraction.csv_ import CsvExtractor
+from doc_manager.extraction.docx_ import DocxExtractor
 from doc_manager.extraction.pdf import PdfExtractor
 from doc_manager.extraction.text import TextExtractor
 
 _PDF = PdfExtractor()
 _TEXT = TextExtractor()
 _CSV = CsvExtractor()
+_DOCX = DocxExtractor()
 
 _BY_EXTENSION: dict[str, Extractor] = {
     "pdf": _PDF,
     "txt": _TEXT,
     "md": _TEXT,
-    "log": _TEXT,
     "csv": _CSV,
+    "docx": _DOCX,
 }
 
 #: Extensions with a registered extractor (matches scanner DEFAULT_INCLUDE set).

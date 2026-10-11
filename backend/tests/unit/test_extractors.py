@@ -13,6 +13,7 @@ from doc_manager.extraction import (
     get_extractor,
 )
 from doc_manager.extraction.csv_ import CsvExtractor
+from doc_manager.extraction.docx_ import DocxExtractor
 from doc_manager.extraction.pdf import PdfExtractor
 from doc_manager.extraction.text import TextExtractor
 
@@ -99,6 +100,36 @@ def test_text_empty_file(tmp_path: Path) -> None:
     assert exc.value.code is ExtractionErrorCode.empty_file
 
 
+def test_docx_paragraphs_and_tables(tmp_path: Path) -> None:
+    import docx
+
+    doc = docx.Document()
+    doc.add_paragraph("First Word paragraph.")
+    doc.add_paragraph("")
+    doc.add_paragraph("Second section.")
+    table = doc.add_table(rows=1, cols=2)
+    table.rows[0].cells[0].text = "Key"
+    table.rows[0].cells[1].text = "Value"
+    path = tmp_path / "memo.docx"
+    doc.save(str(path))
+
+    result = DocxExtractor().extract(path)
+    assert result.extractor_name == "docx"
+    assert all(p.page_number is None for p in result.pages)
+    text = "\n".join(p.text for p in result.pages)
+    assert "First Word paragraph." in text
+    assert "Second section." in text
+    assert "Key\tValue" in text
+
+
+def test_docx_not_a_package(tmp_path: Path) -> None:
+    bogus = tmp_path / "fake.docx"
+    bogus.write_text("this is not a zip-based docx")
+    with pytest.raises(ExtractionError) as exc:
+        DocxExtractor().extract(bogus)
+    assert exc.value.code is ExtractionErrorCode.malformed
+
+
 def test_csv_repeats_header_and_is_row_aware(tmp_path: Path) -> None:
     csv_path = tmp_path / "data.csv"
     csv_path.write_text("name,role\nAda,engineer\nGrace,admiral\n")
@@ -123,4 +154,7 @@ def test_registry_dispatch_and_unsupported() -> None:
     assert isinstance(get_extractor("pdf"), PdfExtractor)
     assert isinstance(get_extractor(".MD"), TextExtractor)
     assert isinstance(get_extractor("csv"), CsvExtractor)
-    assert get_extractor("docx") is None
+    assert isinstance(get_extractor("docx"), DocxExtractor)
+    # log files are no longer indexed; genuinely unsupported types return None.
+    assert get_extractor("log") is None
+    assert get_extractor("xlsx") is None
