@@ -75,6 +75,9 @@ export type PathStyle = "linux" | "windows" | "unc" | "mapped_drive";
 export interface LocationCreate {
   name: string;
   scan_root: string;
+  // Human-facing path shown in the UI (e.g. the original Windows path) when the
+  // stored scan_root is the container mount path.
+  display_root?: string;
   path_style?: PathStyle;
   scan_interval_minutes?: number;
 }
