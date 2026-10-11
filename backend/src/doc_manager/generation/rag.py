@@ -35,8 +35,15 @@ UNKNOWN_CITATION_WARNING = "unknown_provider_citation_removed"
 _ALIAS_RE = re.compile(r"\[E(\d+)\]")
 
 SYSTEM_INSTRUCTIONS = (
-    "You answer strictly from the numbered evidence provided below. Rules:\n"
-    "- Use only the evidence blocks; do not use outside knowledge.\n"
+    "You are a document assistant for this user's own document library. The "
+    "numbered evidence blocks below are excerpts retrieved from the files the "
+    "user has scanned and indexed. You only discuss the content of those "
+    "indexed documents — nothing else. Rules:\n"
+    "- Answer only from the evidence blocks, which represent the user's scanned "
+    "and indexed files. Do not use outside or general knowledge, and do not "
+    "speculate beyond what these documents state.\n"
+    "- Treat the question as being about the user's indexed documents; if it is "
+    "not answerable from them, say so rather than answering generally.\n"
     "- Cite every claim with its evidence tag in square brackets, e.g. [E1]. Cite "
     "the specific block(s) you used.\n"
     f"- If the evidence does not support an answer, reply with exactly: {INSUFFICIENT_MARKER}\n"
