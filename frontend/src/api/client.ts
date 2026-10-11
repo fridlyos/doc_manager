@@ -523,6 +523,11 @@ export interface AskResultData {
   };
 }
 
+export interface AskHistoryTurn {
+  role: "user" | "assistant";
+  content: string;
+}
+
 export interface AskRequestBody {
   question: string;
   provider_id: string;
@@ -530,6 +535,8 @@ export interface AskRequestBody {
   model_id?: string;
   filters?: { source_location_ids?: string[]; extensions?: string[] };
   retrieval?: { top_k?: number; score_threshold?: number };
+  // Prior conversation turns (oldest first) for chat continuity.
+  history?: AskHistoryTurn[];
 }
 
 export interface AskStreamEvent {

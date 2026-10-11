@@ -13,7 +13,7 @@ from __future__ import annotations
 import uuid
 from collections.abc import AsyncIterator, Callable
 from datetime import UTC, datetime
-from typing import Annotated, Any
+from typing import Annotated, Any, Literal
 
 from fastapi import APIRouter, Depends, Request
 from fastapi.responses import StreamingResponse
@@ -42,6 +42,7 @@ from doc_manager.generation.ask import (
     GenerationStarted,
     RetrievalCompleted,
 )
+from doc_manager.generation.base import ChatTurn
 from doc_manager.generation.errors import GenerationError
 from doc_manager.generation.registry import ProviderRegistry
 from doc_manager.retrieval.service import SearchFilters
@@ -50,6 +51,17 @@ router = APIRouter(tags=["ask"])
 
 _MAX_QUESTION_CHARS = 4000
 _MAX_TOP_K = 100
+# Bound the replayed conversation so the prompt stays sane; the client sends only
+# recent turns and the server caps it as defence in depth.
+_MAX_HISTORY_TURNS = 20
+_MAX_HISTORY_CHARS = 8000
+
+
+class AskHistoryTurn(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    role: Literal["user", "assistant"]
+    content: str = Field(min_length=1, max_length=_MAX_HISTORY_CHARS)
 
 
 class AskFiltersBody(BaseModel):
@@ -76,6 +88,7 @@ class AskBody(BaseModel):
     external_processing_acknowledged: bool = False
     filters: AskFiltersBody | None = None
     retrieval: AskRetrievalBody | None = None
+    history: list[AskHistoryTurn] = Field(default_factory=list, max_length=_MAX_HISTORY_TURNS)
 
 
 def _ask_request(body: AskBody) -> AskRequest:
@@ -97,6 +110,7 @@ def _ask_request(body: AskBody) -> AskRequest:
         top_k=retrieval.top_k,
         score_threshold=retrieval.score_threshold,
         model_id=body.model_id,
+        history=tuple(ChatTurn(role=t.role, content=t.content) for t in body.history),
     )
 
 

@@ -22,7 +22,7 @@ import re
 from dataclasses import dataclass, field
 
 from doc_manager.chunking.tokenizer import DEFAULT_TOKENIZER, Tokenizer
-from doc_manager.generation.base import GenerationRequest
+from doc_manager.generation.base import ChatTurn, GenerationRequest
 from doc_manager.retrieval.service import ResolvedPath, SearchResult
 
 #: The model is told to emit this exact token when the evidence cannot support an
@@ -162,9 +162,17 @@ def select_evidence(
 
 
 def build_grounded_prompt(
-    *, question: str, evidence: EvidenceSet, max_output_tokens: int
+    *,
+    question: str,
+    evidence: EvidenceSet,
+    max_output_tokens: int,
+    history: tuple[ChatTurn, ...] = (),
 ) -> GenerationRequest:
-    """Build the grounded ``GenerationRequest`` (system rules + evidence, question)."""
+    """Build the grounded ``GenerationRequest`` (system rules + evidence, question).
+
+    ``history`` carries prior conversation turns so a chat reply can build on
+    them; the evidence/grounding is still rebuilt for the current question.
+    """
     lines = [SYSTEM_INSTRUCTIONS, "", "Evidence:"]
     for block in evidence.blocks:
         lines.append(f"[{block.alias}]{_page_tag(block)} {block.text}")
@@ -172,6 +180,7 @@ def build_grounded_prompt(
         system_prompt="\n".join(lines),
         user_prompt=question,
         max_output_tokens=max_output_tokens,
+        history=history,
     )
 
 

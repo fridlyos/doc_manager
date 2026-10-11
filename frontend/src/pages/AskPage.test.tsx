@@ -118,7 +118,7 @@ test("streams deltas then reconciles the final answer and citation", async () =>
   fireEvent.change(screen.getByPlaceholderText(/Acme agreement renew/i), {
     target: { value: "when does it renew?" },
   });
-  fireEvent.click(screen.getByRole("button", { name: "Ask" }));
+  fireEvent.click(screen.getByRole("button", { name: "Send" }));
 
   expect(await screen.findByText("It renews in December [1].")).toBeInTheDocument();
   expect(screen.getByText("/sources/legal/acme.pdf")).toBeInTheDocument();
@@ -158,7 +158,7 @@ test("external confirmation prompts, then resends with acknowledgement", async (
   fireEvent.change(screen.getByPlaceholderText(/Acme agreement renew/i), {
     target: { value: "renewal?" },
   });
-  fireEvent.click(screen.getByRole("button", { name: "Ask" }));
+  fireEvent.click(screen.getByRole("button", { name: "Send" }));
 
   const confirmButton = await screen.findByRole("button", { name: /Send to external provider/i });
   // First request did not acknowledge.
@@ -185,6 +185,6 @@ test("renders an ask.error", async () => {
   fireEvent.change(screen.getByPlaceholderText(/Acme agreement renew/i), {
     target: { value: "q" },
   });
-  fireEvent.click(screen.getByRole("button", { name: "Ask" }));
+  fireEvent.click(screen.getByRole("button", { name: "Send" }));
   expect(await screen.findByText(/did not finish in time/)).toBeInTheDocument();
 });

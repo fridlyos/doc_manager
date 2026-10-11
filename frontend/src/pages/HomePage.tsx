@@ -43,8 +43,8 @@ export function HomePage() {
           progressed.
         </li>
         <li>
-          <strong>Ask &amp; Search → Ask</strong> — get a grounded answer with citations (needs a
-          generation provider; otherwise the system stays search-only).
+          <strong>Ask &amp; Search → Chat</strong> — hold a conversation grounded in your
+          documents, with citations (needs a generation provider; otherwise search-only).
         </li>
         <li>
           <strong>Operations → Jobs</strong> — watch background work, retry failures.

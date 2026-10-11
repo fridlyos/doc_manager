@@ -26,7 +26,7 @@ const NAV_GROUPS: { title: string; items: { to: string; label: string; end?: boo
     title: "Ask & Search",
     items: [
       { to: "/search", label: "Search" },
-      { to: "/ask", label: "Ask" },
+      { to: "/ask", label: "Chat" },
     ],
   },
   {
