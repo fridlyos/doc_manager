@@ -462,6 +462,15 @@ button.danger {
   gap: 0.35rem;
 }
 
+/* Per-location details are collapsed by default and expand on request, so the
+   list stays a simple scannable table. */
+.location-details {
+  padding: 0.5rem 0.25rem;
+  display: flex;
+  flex-direction: column;
+  gap: 0.25rem;
+}
+
 .scan-progress {
   margin-top: 0.5rem;
   padding: 0.6rem;

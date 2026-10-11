@@ -34,6 +34,7 @@ const PATH_STYLE_LABELS: Record<PathStyle, string> = {
 function LocationRow({ location }: { location: SourceLocation }) {
   const queryClient = useQueryClient();
   const [confirmDelete, setConfirmDelete] = useState(false);
+  const [expanded, setExpanded] = useState(false);
   const [interval, setIntervalValue] = useState(String(location.scan_interval_minutes ?? ""));
   const [testResult, setTestResult] = useState<LocationTestResult | null>(null);
   const invalidate = () => queryClient.invalidateQueries({ queryKey: ["locations"] });
@@ -78,17 +79,32 @@ function LocationRow({ location }: { location: SourceLocation }) {
             : "never"}
         </td>
         <td className="row-actions">
-          <button disabled={scan.isPending} onClick={() => scan.mutate()}>
+          <button
+            disabled={scan.isPending}
+            onClick={() => {
+              setExpanded(true); // reveal progress as soon as a scan is queued
+              scan.mutate();
+            }}
+          >
             Scan
           </button>
-          <button disabled={reindex.isPending} onClick={() => reindex.mutate()}>
+          <button
+            disabled={reindex.isPending}
+            onClick={() => {
+              setExpanded(true);
+              reindex.mutate();
+            }}
+          >
             Re-index
           </button>
           <button disabled={toggle.isPending} onClick={() => toggle.mutate()}>
             {location.enabled ? "Disable" : "Enable"}
           </button>
-          <button disabled={test.isPending} onClick={() => test.mutate()}>
-            Test
+          <button
+            aria-expanded={expanded}
+            onClick={() => setExpanded((v) => !v)}
+          >
+            {expanded ? "Hide details" : "Details"}
           </button>
           <button
             className="danger"
@@ -99,42 +115,49 @@ function LocationRow({ location }: { location: SourceLocation }) {
           </button>
         </td>
       </tr>
-      <tr className="detail-row">
-        <td colSpan={5}>
-          <label className="schedule">
-            Scheduled scan every
-            <input
-              type="number"
-              min={1}
-              value={interval}
-              onChange={(e) => setIntervalValue(e.target.value)}
-              placeholder="off"
-              aria-label={`scan interval minutes for ${location.name}`}
-            />
-            minutes
-            <button disabled={saveSchedule.isPending} onClick={() => saveSchedule.mutate()}>
-              Save
-            </button>
-          </label>
-          {scan.isSuccess && <span className="notice"> Scan queued.</span>}
-          {reindex.isSuccess && <span className="notice"> Re-index queued.</span>}
-          {test.isError && <span className="error"> Test failed: {String(test.error)}</span>}
-          {testResult && (
-            <span className={testResult.ok ? "notice" : "error"}>
-              {" "}
-              Test {testResult.ok ? "passed" : "failed"}:{" "}
-              {testResult.checks.map((c) => `${c.name} ${c.ok ? "ok" : "FAIL"}`).join(", ")}
-            </span>
-          )}
-          {(toggle.isError || saveSchedule.isError || remove.isError) && (
-            <span className="error" role="alert">
-              {" "}
-              {String(toggle.error ?? saveSchedule.error ?? remove.error)}
-            </span>
-          )}
-          <ScanProgress locationId={location.id} />
-        </td>
-      </tr>
+      {expanded && (
+        <tr className="detail-row">
+          <td colSpan={5}>
+            <div className="location-details">
+              <label className="schedule">
+                Scheduled scan every
+                <input
+                  type="number"
+                  min={1}
+                  value={interval}
+                  onChange={(e) => setIntervalValue(e.target.value)}
+                  placeholder="off"
+                  aria-label={`scan interval minutes for ${location.name}`}
+                />
+                minutes
+                <button disabled={saveSchedule.isPending} onClick={() => saveSchedule.mutate()}>
+                  Save
+                </button>
+                <button disabled={test.isPending} onClick={() => test.mutate()}>
+                  Test reachability
+                </button>
+              </label>
+              {scan.isSuccess && <span className="notice"> Scan queued.</span>}
+              {reindex.isSuccess && <span className="notice"> Re-index queued.</span>}
+              {test.isError && <span className="error"> Test failed: {String(test.error)}</span>}
+              {testResult && (
+                <span className={testResult.ok ? "notice" : "error"}>
+                  {" "}
+                  Test {testResult.ok ? "passed" : "failed"}:{" "}
+                  {testResult.checks.map((c) => `${c.name} ${c.ok ? "ok" : "FAIL"}`).join(", ")}
+                </span>
+              )}
+              {(toggle.isError || saveSchedule.isError || remove.isError) && (
+                <span className="error" role="alert">
+                  {" "}
+                  {String(toggle.error ?? saveSchedule.error ?? remove.error)}
+                </span>
+              )}
+              <ScanProgress locationId={location.id} />
+            </div>
+          </td>
+        </tr>
+      )}
       {confirmDelete && (
         <ConfirmDialog
           title="Delete location"
