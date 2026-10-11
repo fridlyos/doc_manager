@@ -3,7 +3,9 @@ import { installMock } from "./mock";
 
 // Every screen is reachable + renders its heading (spec 9.i smoke pass).
 const SCREENS: [string, string][] = [
-  ["/", "System status"],
+  ["/", "doc_manager"],
+  ["/status", "System status"],
+  ["/tutorial", "Tutorial"],
   ["/locations", "Locations"],
   ["/ask", "Ask"],
   ["/search", "Search"],
@@ -19,7 +21,9 @@ for (const [path, heading] of SCREENS) {
   test(`screen ${path} renders`, async ({ page }) => {
     await installMock(page);
     await page.goto(path);
-    await expect(page.getByRole("heading", { name: new RegExp(heading, "i") })).toBeVisible();
+    await expect(
+      page.getByRole("heading", { level: 2, name: new RegExp(heading, "i") }),
+    ).toBeVisible();
   });
 }
 

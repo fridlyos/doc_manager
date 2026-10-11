@@ -11,7 +11,11 @@ export function App() {
         <h1>doc_manager</h1>
         <ProviderBadge />
         <nav aria-label="Primary navigation">
-          <NavLink to="/">Status</NavLink>
+          <NavLink to="/" end>
+            Home
+          </NavLink>
+          <NavLink to="/status">Status</NavLink>
+          <NavLink to="/tutorial">Tutorial</NavLink>
           <NavLink to="/locations">Locations</NavLink>
           <NavLink to="/ask">Ask</NavLink>
           <NavLink to="/search">Search</NavLink>

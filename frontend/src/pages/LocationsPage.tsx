@@ -38,7 +38,11 @@ function LocationRow({ location }: { location: SourceLocation }) {
   const [testResult, setTestResult] = useState<LocationTestResult | null>(null);
   const invalidate = () => queryClient.invalidateQueries({ queryKey: ["locations"] });
 
-  const scan = useMutation({ mutationFn: () => requestLocationScan(location.id) });
+  const scan = useMutation({
+    mutationFn: () => requestLocationScan(location.id),
+    // Surface the new scan job immediately instead of waiting for the next poll.
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: ["jobs", "scan", location.id] }),
+  });
   const reindex = useMutation({ mutationFn: () => reindexLocation(location.id) });
   const toggle = useMutation({
     mutationFn: () => patchLocation(location, { enabled: !location.enabled }),

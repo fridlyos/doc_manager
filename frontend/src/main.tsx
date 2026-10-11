@@ -3,6 +3,7 @@ import ReactDOM from "react-dom/client";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { RouterProvider, createBrowserRouter } from "react-router-dom";
 import { App } from "./app/App";
+import { HomePage } from "./pages/HomePage";
 import { SystemStatusPage } from "./pages/SystemStatusPage";
 import { JobsPage } from "./pages/JobsPage";
 import { LocationsPage } from "./pages/LocationsPage";
@@ -13,6 +14,7 @@ import { AskPage } from "./pages/AskPage";
 import { DuplicatesPage } from "./pages/DuplicatesPage";
 import { CoveragePage } from "./pages/CoveragePage";
 import { SyncPlansPage } from "./pages/SyncPlansPage";
+import { TutorialPage } from "./pages/TutorialPage";
 import "./styles/global.css";
 
 const queryClient = new QueryClient({
@@ -26,7 +28,9 @@ const router = createBrowserRouter([
     path: "/",
     element: <App />,
     children: [
-      { index: true, element: <SystemStatusPage /> },
+      { index: true, element: <HomePage /> },
+      { path: "status", element: <SystemStatusPage /> },
+      { path: "tutorial", element: <TutorialPage /> },
       { path: "locations", element: <LocationsPage /> },
       { path: "ask", element: <AskPage /> },
       { path: "search", element: <SearchPage /> },

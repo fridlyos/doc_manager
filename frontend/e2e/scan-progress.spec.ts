@@ -9,14 +9,16 @@ test("scan submit shows live progress and survives a refresh", async ({ page }) 
   await page.getByRole("button", { name: "Scan" }).first().click();
   await expect.poll(() => state.calls.some((c) => /\/locations\/.+\/scan$/.test(c.url))).toBe(true);
 
-  // The scan-progress panel appears with scanned/target + a breakdown tile.
-  await expect(page.getByText("500 / 10,000")).toBeVisible();
+  // The scan-progress panel appears with a current-action line, a real
+  // scanned/discovered denominator (not the inflated target), and a breakdown.
+  await expect(page.getByText(/Discovering files — 500 of 1,200/)).toBeVisible();
+  await expect(page.getByText("500 / 1,200 (42%)")).toBeVisible();
   await expect(page.getByText("discovered")).toBeVisible();
   await expect(page.getByText("running")).toBeVisible();
 
   // Refresh mid-scan: the panel re-attaches to the still-running job (reconnect).
   await page.reload();
-  await expect(page.getByText("500 / 10,000")).toBeVisible();
+  await expect(page.getByText("500 / 1,200 (42%)")).toBeVisible();
   await expect(page.getByText("running")).toBeVisible();
 });
 
@@ -41,7 +43,7 @@ test("a completed scan shows final counts and an explicit success state", async 
     }),
   );
   await page.goto("/locations");
-  await expect(page.getByText("120 / 10,000")).toBeVisible();
+  await expect(page.getByText("Scan complete")).toBeVisible();
   await expect(page.getByText("succeeded")).toBeVisible();
 });
 

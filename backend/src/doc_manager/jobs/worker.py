@@ -181,6 +181,13 @@ class WorkerRunner:
 
     async def _run_attempt(self, session: AsyncSession, job: IngestionJob, worker_id: str) -> None:
         assert job.lease_token is not None
+        # Capture identity now: _finalize (and committing handlers) run their own
+        # transactions that expire this instance, so reading these attributes in
+        # the finally block would trigger a sync lazy-load in the async worker
+        # (MissingGreenlet) and crash the claim loop. These values are immutable
+        # for the job's lifetime, so locals are safe.
+        job_type = job.job_type
+        source_location_id = job.source_location_id
         ctx = JobContext(
             session=session,
             engine=self.job_engine,
@@ -224,9 +231,9 @@ class WorkerRunner:
         finally:
             heartbeat_task.cancel()
             await asyncio.gather(heartbeat_task, return_exceptions=True)
-            if job.job_type == JobType.scan_location.value and job.source_location_id is not None:
+            if job_type == JobType.scan_location.value and source_location_id is not None:
                 with contextlib.suppress(Exception):
-                    await self.job_engine.release_scan_lock(session, job.source_location_id)
+                    await self.job_engine.release_scan_lock(session, source_location_id)
 
     async def _finalize(
         self,

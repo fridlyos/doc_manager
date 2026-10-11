@@ -117,6 +117,7 @@ run it from **Git Bash** or **WSL**:
 ```bash
 make up          # docker compose up -d --build (+ copies .env if missing)
 make up-dev      # also start the Vite dev UI
+make watch       # rebuild + restart api/worker on change (ARGS=--all adds ui)
 make ps          # service status
 make logs        # tail api + worker
 make preflight   # ./scripts/check.sh — .env, source mount sentinel, backup path

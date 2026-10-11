@@ -14,3 +14,15 @@ services:
     ports:
       - "127.0.0.1:6333:6333"   # HTTP API + web dashboard (/dashboard)
       - "127.0.0.1:6334:6334"   # gRPC
+
+  # Live-reload the dev UI: bind the host frontend source into the container so
+  # Vite HMR sees edits without an image rebuild. The anonymous volume on
+  # node_modules keeps the image's installed deps from being shadowed by the host
+  # (host may have none, or a Windows-incompatible tree). Only active with the
+  # dev profile: `docker compose --profile dev up -d ui`.
+  ui:
+    environment:
+      VITE_USE_POLLING: "true"   # inotify doesn't cross the Windows bind mount
+    volumes:
+      - ./frontend:/app
+      - /app/node_modules

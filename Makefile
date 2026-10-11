@@ -24,6 +24,10 @@ up: env ## Build and start the local stack (detached)
 up-dev: env ## Start the stack plus the Vite dev UI
 	$(COMPOSE) --profile dev up -d --build
 
+.PHONY: watch
+watch: env ## Rebuild + restart api/worker on change (ARGS=--all for ui too)
+	./scripts/watch.sh $(ARGS)
+
 .PHONY: down
 down: ## Stop the stack (keep volumes)
 	$(COMPOSE) down
