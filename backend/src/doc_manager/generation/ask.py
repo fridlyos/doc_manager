@@ -188,6 +188,9 @@ class AskService:
             evidence=prep.evidence,
             max_output_tokens=prep.max_output_tokens,
             history=request.history,
+            # File names may only be shown to the local provider; the external
+            # data boundary forbids sending paths/names.
+            include_source_names=provider.data_boundary is DataBoundary.local,
         )
         parts: list[str] = []
         usage: Usage | None = None
@@ -313,6 +316,9 @@ class AskService:
             evidence=prep.evidence,
             max_output_tokens=prep.max_output_tokens,
             history=request.history,
+            # File names may only be shown to the local provider; the external
+            # data boundary forbids sending paths/names.
+            include_source_names=provider.data_boundary is DataBoundary.local,
         )
         parts: list[str] = []
         usage: Usage | None = None
