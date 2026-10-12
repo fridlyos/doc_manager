@@ -97,6 +97,9 @@ class RetrievalService:
             top_k=top_k,
             score_threshold=score_threshold,
             content_object_ids=allowed,
+            # Hybrid: fuse keyword matches (names, IDs, file names) with the
+            # vector results so an exact term surfaces even on a weak vector score.
+            keyword_query=query,
         )
         if not hits:
             return []
