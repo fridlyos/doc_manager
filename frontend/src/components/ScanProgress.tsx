@@ -127,19 +127,32 @@ export function ScanProgress({ locationId }: { locationId: string }) {
 
   const indexed = entry?.by_state.indexed ?? 0;
   const failed = entry?.by_state.failed ?? 0;
+  const unsupported = entry?.by_state.unsupported ?? 0;
+  // Missing = files that vanished or are no longer eligible (e.g. a type that was
+  // dropped from the index set). They are tombstones, not pending work.
+  const missing = entry?.by_state.missing ?? 0;
   const total = entry?.total ?? 0;
-  const pending = Math.max(0, total - indexed - failed);
+  // "Live" files still present and eligible; missing ones are excluded so the bar
+  // and the pending count reflect only what can still be indexed.
+  const live = Math.max(0, total - missing);
+  const pending = Math.max(0, live - indexed - failed - unsupported);
 
   return (
     <div className="scan-progress" aria-live="polite" aria-busy={active}>
       {/* 1. Catalog state — what is actually searchable. */}
       <div className="catalog-line">
-        <strong>{indexed.toLocaleString()}</strong> of {total.toLocaleString()} files indexed
+        <strong>{indexed.toLocaleString()}</strong> of {live.toLocaleString()} files indexed
         {failed > 0 && <span className="catalog-bad"> · {failed.toLocaleString()} failed</span>}
+        {unsupported > 0 && (
+          <span className="muted"> · {unsupported.toLocaleString()} unsupported</span>
+        )}
         {pending > 0 && <span className="muted"> · {pending.toLocaleString()} not yet indexed</span>}
+        {missing > 0 && (
+          <span className="muted"> · {missing.toLocaleString()} missing (removed)</span>
+        )}
       </div>
-      {total > 0 && (
-        <ProgressBar value={indexed} max={total} label="files indexed in this location" />
+      {live > 0 && (
+        <ProgressBar value={indexed} max={live} label="files indexed in this location" />
       )}
 
       {/* 2. Latest scan — phrased so a per-scan delta is never read as the total. */}
