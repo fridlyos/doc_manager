@@ -11,6 +11,7 @@ disabled (Phase 4 exit criterion 3).
 
 from __future__ import annotations
 
+import re
 import uuid
 from collections.abc import Sequence
 from dataclasses import dataclass, field
@@ -30,6 +31,41 @@ _AVAILABILITY = {
     CatalogEntryState.missing.value: "missing",
 }
 _SNIPPET_CHARS = 320
+
+#: Keyword-leg synonyms. A short, user-phrasing → document-phrasing map so a casual
+#: question surfaces the chunk even when the document uses a different word (e.g.
+#: "job" → "role"/"position"). Only the keyword (OR) leg sees these; the vector is
+#: still embedded from the raw question. Extend conservatively — each entry widens
+#: the keyword match, so keep it to terms whose synonyms are genuinely equivalent.
+_KEYWORD_SYNONYMS: dict[str, tuple[str, ...]] = {
+    "job": ("role", "position", "employment", "experience"),
+    "jobs": ("roles", "positions", "employment", "experience"),
+    "work": ("employment", "experience", "role"),
+    "employer": ("company", "organization"),
+    "salary": ("compensation", "pay", "wage"),
+    "resume": ("cv", "curriculum"),
+    "phone": ("mobile", "cell", "telephone"),
+    "address": ("street", "city"),
+}
+_POSSESSIVE_RE = re.compile(r"['’]s\b", re.UNICODE)
+_WORD_RE = re.compile(r"[^\W_]{2,}", re.UNICODE)
+
+
+def expand_keyword_query(query: str) -> str:
+    """Query string for the keyword (hybrid) leg: possessives stripped, synonyms added.
+
+    Returns a space-joined term list; the repository re-tokenises it. The vector
+    leg keeps using the untouched question, so synonyms only ever *widen* which
+    chunks the keyword leg can match — they never move the semantic anchor.
+    """
+    base = _POSSESSIVE_RE.sub("", query.lower())
+    terms = _WORD_RE.findall(base)
+    expanded = list(terms)
+    for term in terms:
+        for synonym in _KEYWORD_SYNONYMS.get(term, ()):
+            if synonym not in expanded:
+                expanded.append(synonym)
+    return " ".join(expanded)
 
 
 class QueryEmbedder(Protocol):
@@ -97,9 +133,9 @@ class RetrievalService:
             top_k=top_k,
             score_threshold=score_threshold,
             content_object_ids=allowed,
-            # Hybrid: fuse keyword matches (names, IDs, file names) with the
-            # vector results so an exact term surfaces even on a weak vector score.
-            keyword_query=query,
+            # Hybrid: fuse keyword matches (names, IDs, synonyms) with the vector
+            # results so an exact/related term surfaces even on a weak vector score.
+            keyword_query=expand_keyword_query(query),
         )
         if not hits:
             return []

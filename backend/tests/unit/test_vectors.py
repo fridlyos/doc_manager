@@ -109,6 +109,39 @@ async def test_search_returns_ranked_hits_with_threshold() -> None:
     assert [h.text for h in strict] == ["renewal clause"]
 
 
+async def test_keyword_leg_matches_any_term_not_all() -> None:
+    # "albert last job" shares only "albert" with the experience chunk. The
+    # keyword leg must still match it (OR), lifting it via RRF over a weak vector.
+    repo = await _repo()
+    content = uuid.uuid4()
+    await repo.ensure_collection(_profile(4))
+    await repo.upsert_points(
+        [
+            # Right chunk: weak vector match, contains only the term "albert".
+            _point(content, _chunk(0, "albert senior engineer acme corp"), [0.2, 1.0, 0.0, 0.0]),
+            # Decoy: strong vector match, shares no query term.
+            _point(content, _chunk(1, "unrelated cooking recipe"), [1.0, 0.0, 0.0, 0.0]),
+        ]
+    )
+    query_vector = [1.0, 0.0, 0.0, 0.0]  # favours the decoy on vector alone.
+    vector_only = await repo.search(query_vector, top_k=5)
+    assert vector_only[0].text == "unrelated cooking recipe"
+    # With the keyword leg, the term-sharing chunk is fused up to the top.
+    hybrid = await repo.search(query_vector, top_k=5, keyword_query="albert last job")
+    assert hybrid[0].text == "albert senior engineer acme corp"
+
+
+async def test_keyword_leg_skipped_when_no_usable_terms() -> None:
+    # A query of only sub-2-char / symbol tokens yields no keyword filter, so the
+    # search degrades to vector-only instead of matching nothing.
+    repo = await _repo()
+    content = uuid.uuid4()
+    await repo.ensure_collection(_profile(4))
+    await repo.upsert_points([_point(content, _chunk(0, "renewal clause"), [1.0, 0.0, 0.0, 0.0])])
+    hits = await repo.search([1.0, 0.0, 0.0, 0.0], top_k=5, keyword_query="a ? !")
+    assert [h.text for h in hits] == ["renewal clause"]
+
+
 async def test_search_filters_by_content_object() -> None:
     repo = await _repo()
     a, b = uuid.uuid4(), uuid.uuid4()

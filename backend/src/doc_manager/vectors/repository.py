@@ -20,6 +20,7 @@ Paths, filenames, tags, and source names are never stored or accepted here.
 from __future__ import annotations
 
 import contextlib
+import re
 import uuid
 from collections.abc import Sequence
 from dataclasses import dataclass
@@ -168,8 +169,10 @@ class QdrantRepository:
         if not keyword_query or not keyword_query.strip():
             return [_hit(p) for p in vector_points]
 
-        # Keyword leg: same vector, but only over chunks containing the terms.
+        # Keyword leg: same vector, but only over chunks matching the terms.
         kw_filter = _with_text_match(content_filter, keyword_query)
+        if kw_filter is None:  # query had no usable terms → vector-only.
+            return [_hit(p) for p in vector_points]
         keyword_points = await self._query(list(vector), top_k, None, kw_filter)
         return [_hit(p) for p in _rrf_fuse(vector_points, keyword_points, limit=top_k)]
 
@@ -257,13 +260,42 @@ def _content_filter(
     return models.Filter(must=must)
 
 
-def _with_text_match(base: models.Filter | None, query: str) -> models.Filter:
-    """Add a full-text MatchText condition on the chunk text to an existing filter."""
-    text_cond = models.FieldCondition(key="text", match=models.MatchText(text=query))
-    must: list[models.Condition] = [text_cond]
+#: Query tokeniser for the keyword leg. Mirrors the payload text index
+#: (WORD tokenizer, lowercase, min_token_len=2 in ``_ensure_text_index``): unicode
+#: word runs, no underscores, length ≥ 2. Keeps the two sides matching.
+_KEYWORD_TOKEN_RE = re.compile(r"[^\W_]{2,}", re.UNICODE)
+
+
+def _keyword_tokens(query: str) -> list[str]:
+    """Distinct lowercase terms of length ≥ 2, in first-seen order."""
+    seen: list[str] = []
+    for token in _KEYWORD_TOKEN_RE.findall(query.lower()):
+        if token not in seen:
+            seen.append(token)
+    return seen
+
+
+def _with_text_match(base: models.Filter | None, query: str) -> models.Filter | None:
+    """Build a keyword filter matching chunks that contain **any** query term.
+
+    One ``MatchText`` per term goes in ``should`` (OR), not a single ``MatchText``
+    of the whole query (which Qdrant treats as AND-all-tokens — so a chunk had to
+    contain every word, defeating the point of a keyword boost). Combined with the
+    content allow-set in ``must``, a point matches when it is in-scope and shares
+    at least one term. Returns ``None`` when the query has no usable terms.
+    """
+    tokens = _keyword_tokens(query)
+    if not tokens:
+        return None
+    should: list[models.Condition] = [
+        models.FieldCondition(key="text", match=models.MatchText(text=token)) for token in tokens
+    ]
+    must: list[models.Condition] | None = None
     if base is not None and base.must:
-        must = list(base.must) + must
-    return models.Filter(must=must)
+        # ``base`` is always a content allow-set filter (FieldConditions only);
+        # drop the raw-tuple shorthand so the type matches ``Filter.must``.
+        must = [c for c in base.must if not isinstance(c, tuple)]
+    return models.Filter(must=must, should=should)
 
 
 def _rrf_fuse(
