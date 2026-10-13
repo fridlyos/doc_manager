@@ -14,7 +14,7 @@ from doc_manager.extraction import (
 )
 from doc_manager.extraction.csv_ import CsvExtractor
 from doc_manager.extraction.docx_ import DocxExtractor
-from doc_manager.extraction.pdf import PdfExtractor
+from doc_manager.extraction.pdf import PdfExtractor, PdfOcrOptions
 from doc_manager.extraction.text import TextExtractor
 
 
@@ -64,6 +64,47 @@ def test_pdf_image_only_reports_no_extractable_text(tmp_path: Path) -> None:
     with pytest.raises(ExtractionError) as exc:
         PdfExtractor().extract(pdf)
     assert exc.value.code is ExtractionErrorCode.no_extractable_text
+
+
+def test_pdf_ocr_recovers_image_only_pages(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    # OCR engine stubbed (no Tesseract needed): empty pages get OCR'd text instead
+    # of failing with no_extractable_text.
+    monkeypatch.setattr(PdfExtractor, "_ocr_page", lambda self, page: "scanned words here")
+    pdf = tmp_path / "scanned.pdf"
+    _make_pdf(pdf, ["", ""])  # no text layer
+    result = PdfExtractor(PdfOcrOptions()).extract(pdf)
+    assert result.page_count == 2
+    assert all("scanned words here" in p.text for p in result.pages)
+    assert result.metadata["ocr"] is True
+    assert result.extractor_version == "pdf-1-ocr"
+
+
+def test_pdf_ocr_skips_pages_with_text(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    # Text-layer pages must not invoke OCR even when OCR is enabled.
+    def _boom(self: PdfExtractor, page: object) -> str:
+        raise AssertionError("OCR must not run on a page with selectable text")
+
+    monkeypatch.setattr(PdfExtractor, "_ocr_page", _boom)
+    pdf = tmp_path / "text.pdf"
+    _make_pdf(pdf, ["Alpha has real text"])
+    result = PdfExtractor(PdfOcrOptions()).extract(pdf)
+    assert "Alpha" in result.pages[0].text
+
+
+def test_pdf_ocr_engine_failure_reports_ocr_failed(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    def _raise(*args: object, **kwargs: object) -> object:
+        raise RuntimeError("tesseract not found")
+
+    monkeypatch.setattr(pymupdf.Page, "get_textpage_ocr", _raise, raising=False)
+    pdf = tmp_path / "scanned.pdf"
+    _make_pdf(pdf, [""])
+    with pytest.raises(ExtractionError) as exc:
+        PdfExtractor(PdfOcrOptions()).extract(pdf)
+    assert exc.value.code is ExtractionErrorCode.ocr_failed
 
 
 def test_pdf_empty_file(tmp_path: Path) -> None:
@@ -158,3 +199,16 @@ def test_registry_dispatch_and_unsupported() -> None:
     # log files are no longer indexed; genuinely unsupported types return None.
     assert get_extractor("log") is None
     assert get_extractor("xlsx") is None
+
+
+def test_registry_builds_ocr_pdf_when_enabled() -> None:
+    from doc_manager.core.config import Settings
+
+    off = get_extractor("pdf", settings=Settings(ocr_enabled=False))
+    assert isinstance(off, PdfExtractor) and off.version == "pdf-1"
+
+    on = get_extractor("pdf", settings=Settings(ocr_enabled=True, ocr_language="deu"))
+    assert isinstance(on, PdfExtractor) and on.version == "pdf-1-ocr"
+    assert on._ocr == PdfOcrOptions(language="deu")  # type: ignore[attr-defined]
+    # OCR only affects PDFs; other types are unchanged.
+    assert isinstance(get_extractor("txt", settings=Settings(ocr_enabled=True)), TextExtractor)

@@ -87,6 +87,17 @@ class Settings(BaseSettings):
     # budgeting). Refine per model if needed.
     openai_context_tokens: int = 128_000
 
+    # --- OCR (scanned/image-only PDFs) ---
+    # Off by default: OCR is CPU-heavy (seconds–minutes per page) and needs the
+    # Tesseract engine + language data in the worker image. When enabled, a PDF
+    # page with no selectable text is rasterised and OCR'd instead of failing with
+    # no_extractable_text. Re-enabling later re-indexes affected documents.
+    ocr_enabled: bool = False
+    ocr_language: str = "eng"
+    ocr_dpi: int = 300
+    #: Per-document cap on OCR'd pages, so one huge scan can't block the queue.
+    ocr_max_pages: int = 50
+
     # --- Embeddings + artifacts ---
     embedding_model: str = "BAAI/bge-small-en-v1.5"
     embedding_batch_size: int = 256

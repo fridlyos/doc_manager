@@ -93,7 +93,7 @@ async def handle_index_file(ctx: JobContext) -> None:
         raise TransientJobError("fingerprint_changed", "file changed during indexing")
     ctx.check_boundary()
 
-    extractor = get_extractor(entry.extension)
+    extractor = get_extractor(entry.extension, settings=get_settings())
     if extractor is None:
         await _publish_terminal(
             ctx,
