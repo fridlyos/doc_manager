@@ -72,7 +72,12 @@ export function AskPage() {
   const boundary = selected?.data_boundary ?? "local";
 
   function historyFromMessages(msgs: ChatMessage[]): AskHistoryTurn[] {
+    // Drop empty turns (insufficient_evidence / refused replies carry no answer
+    // text): the backend rejects a history turn with blank content (min_length=1),
+    // which otherwise fails every later question once a no-answer turn exists.
+    // Filter before slicing so the window isn't spent on dropped turns.
     return msgs
+      .filter((m) => m.content.trim().length > 0)
       .slice(-MAX_HISTORY_TURNS)
       .map((m) => ({ role: m.role, content: m.content }));
   }
@@ -178,7 +183,10 @@ export function AskPage() {
             <div className="chat-bubble">
               <div className="chat-body">{m.content || <em>…</em>}</div>
               {m.role === "assistant" && m.status === "insufficient_evidence" && (
-                <p className="notice">No supporting evidence was found for this question.</p>
+                <p className="notice">
+                  No supporting evidence was found. Try rephrasing, using a
+                  document&rsquo;s name, or asking about something you&rsquo;ve indexed.
+                </p>
               )}
               {m.role === "assistant" && m.status === "refused" && (
                 <p className="notice">The model declined to answer.</p>
