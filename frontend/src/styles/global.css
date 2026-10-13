@@ -1007,36 +1007,169 @@ button.danger:hover:not(:disabled) {
   color: var(--down);
 }
 
-.pipeline-diagram {
-  width: 100%;
-  max-width: 900px;
-  height: auto;
-  margin: 1rem 0 1.5rem;
+/* Tutorial (Phase 12): three-phase flow, privacy callout, numbered steps,
+   and page cards grouped like the sidebar. */
+.tutorial-lead {
+  max-width: 68ch;
+  line-height: 1.55;
+  color: var(--muted);
 }
-.pipeline-box {
-  fill: var(--panel);
-  stroke: #2b3038;
+.tutorial h3 {
+  margin-top: 2rem;
 }
-.pipeline-box-output {
-  stroke: var(--up);
+
+.flow {
+  --flow-gap: 1.75rem;
+  list-style: none;
+  margin: 1rem 0 0;
+  padding: 0;
+  display: grid;
+  grid-template-columns: 1.3fr 1fr 1fr;
+  gap: var(--flow-gap);
 }
-.pipeline-label {
-  fill: var(--text);
-  font-size: 13px;
-  font-weight: 600;
+.flow-phase {
+  --accent: #7aa2f7;
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  padding: 0.9rem;
+  background: var(--panel);
+  border: 1px solid #22262e;
+  border-top: 3px solid var(--accent);
+  border-radius: 0.5rem;
 }
-.pipeline-detail {
-  fill: var(--muted);
-  font-size: 11px;
+.flow-store {
+  --accent: #bb9af7;
 }
-.pipeline-arrow {
-  fill: none;
-  stroke: var(--muted);
-  stroke-width: 1.5;
-  marker-end: url(#tutorial-arrowhead);
+.flow-use {
+  --accent: var(--up);
 }
-.pipeline-arrowhead {
-  fill: var(--muted);
+/* Chevron between phases, centred in the grid gap. */
+.flow-phase:not(:last-child)::after {
+  content: "";
+  position: absolute;
+  top: 50%;
+  right: calc(var(--flow-gap) / -2 - 0.35rem);
+  width: 0.6rem;
+  height: 0.6rem;
+  border-top: 2px solid var(--muted);
+  border-right: 2px solid var(--muted);
+  transform: translateY(-50%) rotate(45deg);
+}
+.flow-phase-head {
+  display: flex;
+  align-items: center;
+  gap: 0.6rem;
+  margin-bottom: 0.75rem;
+}
+.flow-phase-num {
+  display: grid;
+  place-items: center;
+  flex: none;
+  width: 1.6rem;
+  height: 1.6rem;
+  border-radius: 50%;
+  font-size: 0.8rem;
+  font-weight: 700;
+  color: var(--bg);
+  background: var(--accent);
+}
+.flow-phase-head h4 {
+  margin: 0;
+  font-size: 1rem;
+}
+.flow-phase-head p {
+  margin: 0;
+  font-size: 0.78rem;
+  color: var(--muted);
+}
+.flow-nodes {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  flex: 1;
+  gap: 0.9rem;
+}
+.flow-node {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  gap: 0.15rem;
+  padding: 0.5rem 0.65rem;
+  background: var(--bg);
+  border: 1px solid #2b3038;
+  border-left: 2px solid var(--accent);
+  border-radius: 0.35rem;
+}
+/* Short connector between consecutive steps inside a phase. */
+.flow-node:not(:last-child)::after {
+  content: "";
+  position: absolute;
+  left: 1rem;
+  bottom: calc(-0.9rem - 1px);
+  height: 0.9rem;
+  border-left: 1px dashed #46577f;
+}
+.flow-node strong {
+  font-size: 0.9rem;
+}
+.flow-node strong a {
+  color: var(--text);
+  text-decoration: none;
+}
+.flow-node strong a:hover {
+  color: #7aa2f7;
+  text-decoration: underline;
+}
+.flow-node span {
+  font-size: 0.78rem;
+  line-height: 1.4;
+  color: var(--muted);
+}
+@media (max-width: 860px) {
+  .flow {
+    grid-template-columns: 1fr;
+  }
+  .flow-phase:not(:last-child)::after {
+    top: auto;
+    right: auto;
+    left: 50%;
+    bottom: calc(var(--flow-gap) / -2 - 0.35rem);
+    transform: translateX(-50%) rotate(135deg);
+  }
+}
+
+.privacy-note {
+  margin-top: 1.25rem;
+  padding: 0.75rem 1rem;
+  background: var(--panel);
+  border: 1px solid #22262e;
+  border-left: 3px solid #d29922;
+  border-radius: 0.5rem;
+}
+.privacy-note h4 {
+  margin: 0 0 0.4rem;
+  font-size: 0.9rem;
+}
+.privacy-note ul {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  display: grid;
+  gap: 0.35rem;
+  font-size: 0.88rem;
+  color: var(--muted);
+}
+.privacy-note li {
+  display: grid;
+  grid-template-columns: 5rem 1fr;
+  align-items: baseline;
+  gap: 0.5rem;
+}
+.privacy-note .badge {
+  text-align: center;
 }
 
 .tutorial-steps {
@@ -1044,22 +1177,53 @@ button.danger:hover:not(:disabled) {
   margin: 0;
   padding: 0;
   display: grid;
-  gap: 0.75rem;
+  gap: 0.6rem;
 }
 .tutorial-step {
+  display: flex;
+  gap: 0.85rem;
+  align-items: flex-start;
   background: var(--panel);
   border: 1px solid #22262e;
   border-radius: 0.5rem;
   padding: 0.75rem 1rem;
 }
+.tutorial-step-num {
+  display: grid;
+  place-items: center;
+  flex: none;
+  width: 1.75rem;
+  height: 1.75rem;
+  border-radius: 50%;
+  font-size: 0.85rem;
+  font-weight: 700;
+  color: #7aa2f7;
+  border: 1px solid #46577f;
+  background: #1c2230;
+}
 .tutorial-step h4 {
-  margin: 0 0 0.25rem;
+  margin: 0.15rem 0 0.25rem;
 }
 .tutorial-step p {
-  margin: 0 0 0.5rem;
+  margin: 0 0 0.4rem;
   color: var(--muted);
+  line-height: 1.5;
+}
+.tutorial-step a,
+.tutorial-concept a {
+  color: #7aa2f7;
 }
 
+.tutorial-group + .tutorial-group {
+  margin-top: 1.25rem;
+}
+.tutorial-group-title {
+  margin: 0 0 0.5rem;
+  font-size: 0.72rem;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  color: var(--muted);
+}
 .tutorial-concepts {
   display: grid;
   grid-template-columns: repeat(auto-fill, minmax(240px, 1fr));
@@ -1071,11 +1235,14 @@ button.danger:hover:not(:disabled) {
   border-radius: 0.5rem;
   padding: 0.75rem 1rem;
 }
-.tutorial-concept h4 {
-  margin: 0 0 0.25rem;
+.tutorial-concept h5 {
+  margin: 0 0 0.3rem;
+  font-size: 0.95rem;
 }
 .tutorial-concept p {
   margin: 0;
+  font-size: 0.88rem;
+  line-height: 1.5;
   color: var(--muted);
 }
 

@@ -1,188 +1,235 @@
 import { Link } from "react-router-dom";
 
-type Step = { title: string; body: string; to: string };
+// How-it-works flow, drawn as three phases (ingest → store → use) in plain
+// HTML so it wraps cleanly on narrow screens instead of shrinking an SVG.
+type FlowNode = { label: string; detail: string; to?: string };
+type Phase = { key: string; title: string; caption: string; nodes: FlowNode[] };
+
+const FLOW: Phase[] = [
+  {
+    key: "ingest",
+    title: "Ingest",
+    caption: "Background jobs, per location",
+    nodes: [
+      { label: "Location", detail: "A folder: local, mapped drive, UNC or C:\\ path", to: "/locations" },
+      { label: "Scan", detail: "Find new, changed and missing files", to: "/locations" },
+      { label: "Extract", detail: "PDF, DOCX, TXT, MD, CSV; optional OCR for scanned PDFs" },
+      { label: "Chunk + embed", detail: "Split into passages, file name included in the vector" },
+    ],
+  },
+  {
+    key: "store",
+    title: "Store",
+    caption: "Everything stays on this machine",
+    nodes: [
+      { label: "Catalog", detail: "Postgres: files, states, jobs, duplicates", to: "/documents" },
+      { label: "Vector index", detail: "Qdrant: passage embeddings + keyword text" },
+    ],
+  },
+  {
+    key: "use",
+    title: "Use",
+    caption: "Retrieval is always local",
+    nodes: [
+      { label: "Search", detail: "Hybrid keyword + semantic ranking, no LLM", to: "/search" },
+      { label: "Chat", detail: "Multi-turn answers grounded in cited passages", to: "/ask" },
+    ],
+  },
+];
+
+function FlowDiagram() {
+  return (
+    <ol className="flow" aria-label="How doc_manager works: ingest, store, use">
+      {FLOW.map((phase, i) => (
+        <li key={phase.key} className={`flow-phase flow-${phase.key}`}>
+          <header className="flow-phase-head">
+            <span className="flow-phase-num">{i + 1}</span>
+            <div>
+              <h4>{phase.title}</h4>
+              <p>{phase.caption}</p>
+            </div>
+          </header>
+          <ol className="flow-nodes">
+            {phase.nodes.map((node) => (
+              <li key={node.label} className="flow-node">
+                <strong>{node.to ? <Link to={node.to}>{node.label}</Link> : node.label}</strong>
+                <span>{node.detail}</span>
+              </li>
+            ))}
+          </ol>
+        </li>
+      ))}
+    </ol>
+  );
+}
+
+type Step = { title: string; body: string; to: string; cta: string };
 
 const QUICK_START: Step[] = [
   {
-    title: "1. Add a location",
-    body: "Point doc_manager at a folder (local path, mapped drive, or UNC share). This registers a scan root; it does not copy or move anything.",
+    title: "Add a location",
+    body: "Pick a folder with the folder picker or paste a path (Windows C:\\ paths and network shares work). Nothing is copied or moved; it only registers a scan root.",
     to: "/locations",
+    cta: "Locations",
   },
   {
-    title: "2. Scan it",
-    body: "Click Scan to discover files under that root. A background job walks the tree and records what it finds — new, changed, and deleted files.",
+    title: "Scan it",
+    body: "Press Scan on the location's row. Open Details to watch live progress, set a scan interval in minutes for automatic rescans, or test that the folder is reachable.",
     to: "/locations",
+    cta: "Locations",
   },
   {
-    title: "3. Watch it index",
-    body: "Each discovered file becomes an indexing job: extract text, split into chunks, embed, and store. Track progress live, or check all jobs at once.",
+    title: "Let it index",
+    body: "Each new or changed file is extracted, chunked and embedded in the background. Jobs shows every unit of work; Errors lists files that failed, with retry.",
     to: "/jobs",
+    cta: "Jobs",
   },
   {
-    title: "4. Search or Ask",
-    body: "Search returns the raw matching passages. Ask sends your question to an LLM and returns a grounded answer with citations back to source files.",
+    title: "Find things",
+    body: "Search matches exact words and meaning together, so both \"invoice 2024\" and \"what did we pay the plumber\" work. Results show the passage, file and score.",
     to: "/search",
+    cta: "Search",
   },
   {
-    title: "5. Check catalog health",
-    body: "Coverage shows how many files per location are indexed vs. failed vs. missing. Errors lists failures you can retry. Duplicates flags repeated content.",
-    to: "/coverage",
-  },
-];
-
-const CONCEPTS: { title: string; body: string; to: string }[] = [
-  {
-    title: "Locations",
-    body: "A location is a scan root — a folder doc_manager watches. Each location can be scanned on demand or on a schedule, tested for reachability, or disabled without deleting its catalog entries.",
-    to: "/locations",
-  },
-  {
-    title: "Search",
-    body: "Semantic search over indexed chunks. Returns the closest-matching passages with a similarity score, source path, and page range — no LLM call involved.",
-    to: "/search",
-  },
-  {
-    title: "Ask",
-    body: "Retrieval-augmented question answering. Evidence is gathered locally first; only the evidence text (never file paths or names) is sent to the chosen provider. External providers require an explicit confirmation showing exactly what would be sent.",
+    title: "Ask questions",
+    body: "Chat answers in a running conversation, citing the passages it used. Pick the model in the header; follow-up questions keep the earlier context.",
     to: "/ask",
-  },
-  {
-    title: "Documents",
-    body: "The catalog of every file discovered across all locations, with its current state (indexed, failed, unsupported, missing, discovered, queued).",
-    to: "/documents",
-  },
-  {
-    title: "Duplicates",
-    body: "Groups files that are byte-identical (exact) or that extract to the same text (text) — useful for spotting copies across locations before cleaning up.",
-    to: "/duplicates",
-  },
-  {
-    title: "Coverage",
-    body: "A per-location breakdown of document states, so you can see at a glance whether a location is fully indexed or still catching up.",
-    to: "/coverage",
-  },
-  {
-    title: "Sync Plans",
-    body: "Compares two locations and proposes which files to copy to bring one in line with the other — review before anything is written.",
-    to: "/sync-plans",
-  },
-  {
-    title: "Errors",
-    body: "Documents that failed to index, with the reason, and a one-click retry once the underlying issue is fixed.",
-    to: "/errors",
-  },
-  {
-    title: "Jobs",
-    body: "Every background unit of work (scan, index, rebuild, cleanup) with its status. Jobs can be retried or cancelled; a manual retry always creates a new linked job.",
-    to: "/jobs",
+    cta: "Chat",
   },
 ];
 
-function PipelineDiagram() {
-  const stages = [
-    { label: "Location", detail: "scan root" },
-    { label: "Scan", detail: "discover files" },
-    { label: "Extract + chunk", detail: "text, pages" },
-    { label: "Embed", detail: "vectors" },
-    { label: "Catalog", detail: "Postgres + Qdrant" },
-  ];
-  const outputs = [
-    { label: "Search", detail: "ranked passages" },
-    { label: "Ask", detail: "cited answer" },
-  ];
+type Concept = { title: string; body: string; to: string };
+type ConceptGroup = { title: string; items: Concept[] };
 
-  return (
-    <svg
-      className="pipeline-diagram"
-      viewBox="0 0 900 220"
-      role="img"
-      aria-label="Pipeline: Location leads to Scan, Extract and chunk, Embed, then Catalog, which feeds Search and Ask."
-    >
-      <defs>
-        <marker
-          id="tutorial-arrowhead"
-          viewBox="0 0 10 10"
-          refX="8"
-          refY="5"
-          markerWidth="6"
-          markerHeight="6"
-          orient="auto-start-reverse"
-        >
-          <path d="M0 0 L10 5 L0 10 z" className="pipeline-arrowhead" />
-        </marker>
-      </defs>
-      {stages.map((s, i) => {
-        const x = 10 + i * 175;
-        return (
-          <g key={s.label}>
-            <rect x={x} y={70} width={150} height={60} rx={8} className="pipeline-box" />
-            <text x={x + 75} y={95} textAnchor="middle" className="pipeline-label">
-              {s.label}
-            </text>
-            <text x={x + 75} y={113} textAnchor="middle" className="pipeline-detail">
-              {s.detail}
-            </text>
-            {i < stages.length - 1 && (
-              <path d={`M${x + 150} 100 L${x + 175} 100`} className="pipeline-arrow" />
-            )}
-          </g>
-        );
-      })}
-      <path d="M815 100 V140 Q815 150 805 150 H490 Q480 150 480 160" className="pipeline-arrow" />
-      {outputs.map((o, i) => {
-        const x = 330 + i * 175;
-        return (
-          <g key={o.label}>
-            <rect x={x} y={160} width={150} height={50} rx={8} className="pipeline-box pipeline-box-output" />
-            <text x={x + 75} y={182} textAnchor="middle" className="pipeline-label">
-              {o.label}
-            </text>
-            <text x={x + 75} y={198} textAnchor="middle" className="pipeline-detail">
-              {o.detail}
-            </text>
-          </g>
-        );
-      })}
-      <path d="M480 185 H330" className="pipeline-arrow" />
-    </svg>
-  );
-}
+// Mirrors the sidebar groups so this page doubles as a map of the menu.
+const CONCEPT_GROUPS: ConceptGroup[] = [
+  {
+    title: "Library",
+    items: [
+      {
+        title: "Locations",
+        body: "Folders doc_manager watches. Scan or re-index on demand, schedule rescans, test reachability, or disable without losing the catalog.",
+        to: "/locations",
+      },
+      {
+        title: "Documents",
+        body: "Every file found, with its state (indexed, failed, unsupported, missing, queued). Filter by location or search by name.",
+        to: "/documents",
+      },
+      {
+        title: "Coverage",
+        body: "Per-location breakdown of document states: is a folder fully indexed or still catching up?",
+        to: "/coverage",
+      },
+      {
+        title: "Duplicates",
+        body: "Files that are byte-identical (exact) or extract to the same text, across all locations.",
+        to: "/duplicates",
+      },
+      {
+        title: "Sync Plans",
+        body: "Compare two locations and get a reviewable list of copies and conflicts. Nothing is written until you act on it.",
+        to: "/sync-plans",
+      },
+    ],
+  },
+  {
+    title: "Ask & Search",
+    items: [
+      {
+        title: "Search",
+        body: "Hybrid retrieval: keyword matches (with common synonyms) and semantic matches fused into one ranking. No LLM involved.",
+        to: "/search",
+      },
+      {
+        title: "Chat",
+        body: "Retrieval-augmented conversation with citations. Evidence is gathered locally, then only that evidence goes to the model.",
+        to: "/ask",
+      },
+    ],
+  },
+  {
+    title: "Operations",
+    items: [
+      {
+        title: "Jobs",
+        body: "Every scan, index, rebuild and cleanup job with its status. Retry or cancel; a manual retry creates a new linked job.",
+        to: "/jobs",
+      },
+      {
+        title: "Errors",
+        body: "Files that failed to index and why, with one-click retry once the cause is fixed.",
+        to: "/errors",
+      },
+      {
+        title: "System status",
+        body: "Health of each backend component, and which ones are required for the app to work.",
+        to: "/status",
+      },
+    ],
+  },
+];
 
 export function TutorialPage() {
   return (
     <section className="tutorial">
       <h2>Tutorial</h2>
-      <p className="notice">
-        doc_manager indexes documents from local or network folders so you can search and ask
-        questions over them with citations back to the source file. Everything runs locally
-        unless you explicitly opt in to an external provider.
+      <p className="tutorial-lead">
+        doc_manager indexes documents in your local and network folders so you can search them and
+        chat with them, with every answer cited back to the source file. It runs locally unless you
+        explicitly choose an external model.
       </p>
 
       <h3>How it works</h3>
-      <PipelineDiagram />
+      <FlowDiagram />
+
+      <aside className="privacy-note" aria-label="Privacy">
+        <h4>What leaves your machine</h4>
+        <ul>
+          <li>
+            <span className="badge boundary-local">local</span> Local models (Ollama) see the
+            evidence passages and their file names.
+          </li>
+          <li>
+            <span className="badge boundary-external">external</span> External providers get the
+            evidence text only, never paths or file names, and only after you confirm exactly what
+            will be sent.
+          </li>
+        </ul>
+      </aside>
 
       <h3>Quick start</h3>
       <ol className="tutorial-steps">
-        {QUICK_START.map((step) => (
+        {QUICK_START.map((step, i) => (
           <li key={step.title} className="tutorial-step">
-            <h4>{step.title}</h4>
-            <p>{step.body}</p>
-            <Link to={step.to}>Open →</Link>
+            <span className="tutorial-step-num" aria-hidden="true">
+              {i + 1}
+            </span>
+            <div>
+              <h4>{step.title}</h4>
+              <p>{step.body}</p>
+              <Link to={step.to}>Open {step.cta} →</Link>
+            </div>
           </li>
         ))}
       </ol>
 
       <h3>Pages explained</h3>
-      <div className="tutorial-concepts">
-        {CONCEPTS.map((c) => (
-          <article key={c.title} className="tutorial-concept">
-            <h4>
-              <Link to={c.to}>{c.title}</Link>
-            </h4>
-            <p>{c.body}</p>
-          </article>
-        ))}
-      </div>
+      {CONCEPT_GROUPS.map((group) => (
+        <div key={group.title} className="tutorial-group">
+          <h4 className="tutorial-group-title">{group.title}</h4>
+          <div className="tutorial-concepts">
+            {group.items.map((c) => (
+              <article key={c.title} className="tutorial-concept">
+                <h5>
+                  <Link to={c.to}>{c.title}</Link>
+                </h5>
+                <p>{c.body}</p>
+              </article>
+            ))}
+          </div>
+        </div>
+      ))}
     </section>
   );
 }
