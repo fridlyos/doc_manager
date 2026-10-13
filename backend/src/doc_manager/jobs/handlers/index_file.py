@@ -19,6 +19,7 @@ from __future__ import annotations
 
 import asyncio
 import os
+import re
 import uuid
 from pathlib import Path
 
@@ -92,7 +93,7 @@ async def handle_index_file(ctx: JobContext) -> None:
         raise TransientJobError("fingerprint_changed", "file changed during indexing")
     ctx.check_boundary()
 
-    extractor = get_extractor(entry.extension)
+    extractor = get_extractor(entry.extension, settings=get_settings())
     if extractor is None:
         await _publish_terminal(
             ctx,
@@ -156,8 +157,16 @@ async def handle_index_file(ctx: JobContext) -> None:
         )
     ):
         await qdrant.ensure_collection(embedding_profile)
+        # File names and their folders carry strong signal (e.g.
+        # "INVESTMENT STATMENTS/Chase 401K.pdf"), so prepend the relative path to
+        # each chunk's embedding input. Separators (_ - / .) become spaces so the
+        # name tokenises like a natural query ("af_resume_latest" -> "af resume
+        # latest"). Only the vector captures the name — the stored chunk text
+        # stays pure content for snippets and dedup.
+        name_text = re.sub(r"[._/\\-]+", " ", entry.relative_path).strip()
+        name_context = f"[File: {name_text}]\n"
         vectors = await asyncio.to_thread(
-            embedding_service.embed_documents, [c.text for c in chunks]
+            embedding_service.embed_documents, [name_context + c.text for c in chunks]
         )
     ctx.check_boundary()
 

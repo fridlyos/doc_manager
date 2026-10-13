@@ -19,6 +19,8 @@ Paths, filenames, tags, and source names are never stored or accepted here.
 
 from __future__ import annotations
 
+import contextlib
+import re
 import uuid
 from collections.abc import Sequence
 from dataclasses import dataclass
@@ -83,6 +85,8 @@ class QdrantRepository:
                     f"collection {self._collection} is {size}-d/{distance}, "
                     f"incompatible with profile {profile.vector_size}-d/{profile.distance}",
                 )
+            # Backfill the text index on collections created before hybrid search.
+            await self._ensure_text_index()
             return
         await self._client.create_collection(
             self._collection,
@@ -90,6 +94,23 @@ class QdrantRepository:
                 size=profile.vector_size, distance=self._distance(profile.distance)
             ),
         )
+        await self._ensure_text_index()
+
+    async def _ensure_text_index(self) -> None:
+        """Full-text index on the chunk ``text`` payload, enabling keyword (hybrid)
+        search. Idempotent — recreating an existing index is a harmless no-op."""
+        # Index already exists / server variance → harmless.
+        with contextlib.suppress(Exception):
+            await self._client.create_payload_index(
+                self._collection,
+                field_name="text",
+                field_schema=models.TextIndexParams(
+                    type=models.TextIndexType.TEXT,
+                    tokenizer=models.TokenizerType.WORD,
+                    lowercase=True,
+                    min_token_len=2,
+                ),
+            )
 
     async def upsert_points(self, points: Sequence[VectorPoint]) -> int:
         """Idempotently upsert points; returns the number written."""
@@ -126,26 +147,51 @@ class QdrantRepository:
         top_k: int,
         score_threshold: float | None = None,
         content_object_ids: Sequence[uuid.UUID | str] | None = None,
+        keyword_query: str | None = None,
     ) -> list[SearchHit]:
         """Nearest points to ``vector``, optionally restricted to content objects.
 
         ``content_object_ids`` is the allow-set the retrieval layer derives from
         SQL source/extension/tag/status filters (empty set → no results).
+
+        ``keyword_query`` turns on hybrid search: a second, keyword-filtered
+        lookup (chunks whose text contains the query terms — names, IDs, file
+        names) is fused with the vector results by reciprocal-rank fusion, so an
+        exact term match surfaces even when its vector similarity is lukewarm.
         """
-        query_filter = None
+        content_filter = None
         if content_object_ids is not None:
             if len(content_object_ids) == 0:
                 return []
-            query_filter = _content_filter([str(c) for c in content_object_ids])
+            content_filter = _content_filter([str(c) for c in content_object_ids])
+
+        vector_points = await self._query(list(vector), top_k, score_threshold, content_filter)
+        if not keyword_query or not keyword_query.strip():
+            return [_hit(p) for p in vector_points]
+
+        # Keyword leg: same vector, but only over chunks matching the terms.
+        kw_filter = _with_text_match(content_filter, keyword_query)
+        if kw_filter is None:  # query had no usable terms → vector-only.
+            return [_hit(p) for p in vector_points]
+        keyword_points = await self._query(list(vector), top_k, None, kw_filter)
+        return [_hit(p) for p in _rrf_fuse(vector_points, keyword_points, limit=top_k)]
+
+    async def _query(
+        self,
+        vector: list[float],
+        top_k: int,
+        score_threshold: float | None,
+        query_filter: models.Filter | None,
+    ) -> list[models.ScoredPoint]:
         response = await self._client.query_points(
             self._collection,
-            query=list(vector),
+            query=vector,
             limit=top_k,
             score_threshold=score_threshold,
             query_filter=query_filter,
             with_payload=True,
         )
-        return [_hit(point) for point in response.points]
+        return list(response.points)
 
     async def count_for_content(self, content_object_id: uuid.UUID | str) -> int:
         result = await self._client.count(
@@ -212,6 +258,71 @@ def _content_filter(
             )
         )
     return models.Filter(must=must)
+
+
+#: Query tokeniser for the keyword leg. Mirrors the payload text index
+#: (WORD tokenizer, lowercase, min_token_len=2 in ``_ensure_text_index``): unicode
+#: word runs, no underscores, length ≥ 2. Keeps the two sides matching.
+_KEYWORD_TOKEN_RE = re.compile(r"[^\W_]{2,}", re.UNICODE)
+
+
+def _keyword_tokens(query: str) -> list[str]:
+    """Distinct lowercase terms of length ≥ 2, in first-seen order."""
+    seen: list[str] = []
+    for token in _KEYWORD_TOKEN_RE.findall(query.lower()):
+        if token not in seen:
+            seen.append(token)
+    return seen
+
+
+def _with_text_match(base: models.Filter | None, query: str) -> models.Filter | None:
+    """Build a keyword filter matching chunks that contain **any** query term.
+
+    One ``MatchText`` per term goes in ``should`` (OR), not a single ``MatchText``
+    of the whole query (which Qdrant treats as AND-all-tokens — so a chunk had to
+    contain every word, defeating the point of a keyword boost). Combined with the
+    content allow-set in ``must``, a point matches when it is in-scope and shares
+    at least one term. Returns ``None`` when the query has no usable terms.
+    """
+    tokens = _keyword_tokens(query)
+    if not tokens:
+        return None
+    should: list[models.Condition] = [
+        models.FieldCondition(key="text", match=models.MatchText(text=token)) for token in tokens
+    ]
+    must: list[models.Condition] | None = None
+    if base is not None and base.must:
+        # ``base`` is always a content allow-set filter (FieldConditions only);
+        # drop the raw-tuple shorthand so the type matches ``Filter.must``.
+        must = [c for c in base.must if not isinstance(c, tuple)]
+    return models.Filter(must=must, should=should)
+
+
+def _rrf_fuse(
+    vector_points: list[models.ScoredPoint],
+    keyword_points: list[models.ScoredPoint],
+    *,
+    limit: int,
+    k: int = 60,
+) -> list[models.ScoredPoint]:
+    """Reciprocal-rank fusion of two ranked lists, keyed by point id.
+
+    Each list contributes ``1 / (k + rank)`` per point; scores sum across lists.
+    No score normalisation needed, so a strong keyword hit with a weak vector
+    score (or vice versa) still ranks well.
+    """
+    scores: dict[str, float] = {}
+    point_by_id: dict[str, models.ScoredPoint] = {}
+    for ranked in (vector_points, keyword_points):
+        for rank, point in enumerate(ranked):
+            pid = str(point.id)
+            scores[pid] = scores.get(pid, 0.0) + 1.0 / (k + rank + 1)
+            # Keep the representation with the higher vector score for its payload.
+            prev = point_by_id.get(pid)
+            if prev is None or (point.score or 0.0) > (prev.score or 0.0):
+                point_by_id[pid] = point
+    ordered = sorted(scores, key=lambda pid: scores[pid], reverse=True)
+    return [point_by_id[pid] for pid in ordered[:limit]]
 
 
 def _hit(point: models.ScoredPoint) -> SearchHit:

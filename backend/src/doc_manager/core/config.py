@@ -87,6 +87,17 @@ class Settings(BaseSettings):
     # budgeting). Refine per model if needed.
     openai_context_tokens: int = 128_000
 
+    # --- OCR (scanned/image-only PDFs) ---
+    # Off by default: OCR is CPU-heavy (seconds–minutes per page) and needs the
+    # Tesseract engine + language data in the worker image. When enabled, a PDF
+    # page with no selectable text is rasterised and OCR'd instead of failing with
+    # no_extractable_text. Re-enabling later re-indexes affected documents.
+    ocr_enabled: bool = False
+    ocr_language: str = "eng"
+    ocr_dpi: int = 300
+    #: Per-document cap on OCR'd pages, so one huge scan can't block the queue.
+    ocr_max_pages: int = 50
+
     # --- Embeddings + artifacts ---
     embedding_model: str = "BAAI/bge-small-en-v1.5"
     embedding_batch_size: int = 256
@@ -138,8 +149,13 @@ class Settings(BaseSettings):
     # RAG evidence selection (Phase 5.e): cap chunks per content object and the
     # total evidence blocks; the token budget is derived from the provider's
     # context window minus the output reservation at request time.
+    #
+    # 6 blocks keeps the prompt small enough for a local CPU model to answer in a
+    # reasonable time and cite reliably; large contexts (12+) make an 8B model on
+    # CPU take ~100s and stop emitting citation tags. Raise it for GPU/external
+    # providers where more evidence is cheap.
     ask_max_chunks_per_content: int = 3
-    ask_max_evidence_blocks: int = 12
+    ask_max_evidence_blocks: int = 6
 
     @field_validator("database_url")
     @classmethod

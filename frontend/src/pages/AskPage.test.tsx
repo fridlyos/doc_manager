@@ -118,7 +118,7 @@ test("streams deltas then reconciles the final answer and citation", async () =>
   fireEvent.change(screen.getByPlaceholderText(/Acme agreement renew/i), {
     target: { value: "when does it renew?" },
   });
-  fireEvent.click(screen.getByRole("button", { name: "Ask" }));
+  fireEvent.click(screen.getByRole("button", { name: "Send" }));
 
   expect(await screen.findByText("It renews in December [1].")).toBeInTheDocument();
   expect(screen.getByText("/sources/legal/acme.pdf")).toBeInTheDocument();
@@ -158,7 +158,7 @@ test("external confirmation prompts, then resends with acknowledgement", async (
   fireEvent.change(screen.getByPlaceholderText(/Acme agreement renew/i), {
     target: { value: "renewal?" },
   });
-  fireEvent.click(screen.getByRole("button", { name: "Ask" }));
+  fireEvent.click(screen.getByRole("button", { name: "Send" }));
 
   const confirmButton = await screen.findByRole("button", { name: /Send to external provider/i });
   // First request did not acknowledge.
@@ -167,6 +167,41 @@ test("external confirmation prompts, then resends with acknowledgement", async (
   fireEvent.click(confirmButton);
   await waitFor(() => expect(calls.length).toBe(2));
   expect(JSON.parse(calls[1].body as string).external_processing_acknowledged).toBe(true);
+});
+
+test("omits empty no-answer turns from history on the next question", async () => {
+  // Regression: an insufficient_evidence reply has answer=null. If its blank turn
+  // is replayed in history, the backend (content min_length=1) rejects every later
+  // question with 422. History must carry the prior user question but drop the
+  // empty assistant turn.
+  const insufficient = { ...RESULT, status: "insufficient_evidence", answer: null, citations: [] };
+  const calls: RequestInit[] = [];
+  vi.spyOn(globalThis, "fetch").mockImplementation((url, init) => {
+    if (String(url).includes("/system/providers"))
+      return Promise.resolve(providersResponse() as Response);
+    calls.push(init as RequestInit);
+    const body = calls.length === 1 ? insufficient : RESULT;
+    return Promise.resolve(
+      streamResponse(sseFrames({ event: "ask.result", data: { data: body } })) as Response,
+    );
+  });
+  renderPage();
+
+  await screen.findByRole("option", { name: "ollama" });
+  const input = screen.getByPlaceholderText(/Acme agreement renew/i);
+  fireEvent.change(input, { target: { value: "first question" } });
+  fireEvent.click(screen.getByRole("button", { name: "Send" }));
+  await screen.findByText(/No supporting evidence was found/i);
+
+  fireEvent.change(input, { target: { value: "second question" } });
+  fireEvent.click(screen.getByRole("button", { name: "Send" }));
+  await waitFor(() => expect(calls.length).toBe(2));
+
+  const history = JSON.parse(calls[1].body as string).history as { role: string; content: string }[];
+  // No blank turns at all, and the earlier user question is preserved.
+  expect(history.every((t) => t.content.trim().length > 0)).toBe(true);
+  expect(history).toContainEqual({ role: "user", content: "first question" });
+  expect(history.some((t) => t.role === "assistant" && t.content === "")).toBe(false);
 });
 
 test("renders an ask.error", async () => {
@@ -185,6 +220,6 @@ test("renders an ask.error", async () => {
   fireEvent.change(screen.getByPlaceholderText(/Acme agreement renew/i), {
     target: { value: "q" },
   });
-  fireEvent.click(screen.getByRole("button", { name: "Ask" }));
+  fireEvent.click(screen.getByRole("button", { name: "Send" }));
   expect(await screen.findByText(/did not finish in time/)).toBeInTheDocument();
 });

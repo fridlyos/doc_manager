@@ -1,6 +1,5 @@
 import { useQuery } from "@tanstack/react-query";
-import { fetchJob, fetchJobs, Job } from "../api/client";
-import { CountsRow } from "./CountsRow";
+import { fetchCoverage, fetchJob, fetchJobs, Job } from "../api/client";
 import { ProgressBar } from "./ProgressBar";
 import { StatusPill } from "./StatusPill";
 
@@ -92,13 +91,13 @@ function stageFor(job: Job): Stage {
 }
 
 /**
- * Live scan-progress panel for one location (Phase 9, improved Phase 10). Finds
- * the location's latest scan job, then polls its detail (for the scan_summary
- * breakdown) while active. Shows a human-readable current-action line plus a
- * progress bar scaled to real work — discovery (scanned/discovered) then
- * indexing (done/total) — falling back to an indeterminate bar before a count is
- * known. Renders purely from the polled GET, so a page refresh re-attaches to a
- * running worker scan. Returns null when the location has never been scanned.
+ * Live scan/index status for one location (rebuilt Phase 11). Two clearly
+ * separated things:
+ *   1. Catalog state — how many of this location's files are indexed and thus
+ *      searchable (from coverage). This is the number that matters day to day.
+ *   2. The latest scan — what that one run is doing/did, phrased as a sentence so
+ *      the per-scan delta ("1 new file indexed") is never mistaken for the total.
+ * Renders purely from polled GETs, so a refresh re-attaches to a running scan.
  */
 export function ScanProgress({ locationId }: { locationId: string }) {
   const list = useQuery({
@@ -116,46 +115,94 @@ export function ScanProgress({ locationId }: { locationId: string }) {
     refetchInterval: active ? 1500 : false,
   });
 
-  if (!latest) return null;
-  const job = detail.data ?? latest;
-  const summary = job.scan_summary;
-  const d = job.progress.detail;
-  const discovered = summary?.discovered ?? d?.discovered ?? 0;
-  const failed = summary?.index_failed ?? 0;
-  const err = errorLabel(job);
-  const stage = stageFor(job);
+  const coverage = useQuery({
+    queryKey: ["coverage"],
+    queryFn: fetchCoverage,
+    refetchInterval: active ? 3000 : 15000,
+  });
+  const entry = coverage.data?.find((c) => c.source_location_id === locationId);
 
-  // Indeterminate while we are doing work but have no meaningful total yet.
-  const hasBar = stage.kind === "discovering" || stage.kind === "indexing";
-  const indeterminate =
-    (stage.kind === "waiting" || stage.kind === "reconciling") ||
-    (hasBar && (stage as { max: number }).max <= 0);
+  // Nothing to show until the location has either coverage or a scan on record.
+  if (!entry && !latest) return null;
+
+  const indexed = entry?.by_state.indexed ?? 0;
+  const failed = entry?.by_state.failed ?? 0;
+  const unsupported = entry?.by_state.unsupported ?? 0;
+  // Missing = files that vanished or are no longer eligible (e.g. a type that was
+  // dropped from the index set). They are tombstones, not pending work.
+  const missing = entry?.by_state.missing ?? 0;
+  const total = entry?.total ?? 0;
+  // "Live" files still present and eligible; missing ones are excluded so the bar
+  // and the pending count reflect only what can still be indexed.
+  const live = Math.max(0, total - missing);
+  const pending = Math.max(0, live - indexed - failed - unsupported);
 
   return (
     <div className="scan-progress" aria-live="polite" aria-busy={active}>
+      {/* 1. Catalog state — what is actually searchable. */}
+      <div className="catalog-line">
+        <strong>{indexed.toLocaleString()}</strong> of {live.toLocaleString()} files indexed
+        {failed > 0 && <span className="catalog-bad"> · {failed.toLocaleString()} failed</span>}
+        {unsupported > 0 && (
+          <span className="muted"> · {unsupported.toLocaleString()} unsupported</span>
+        )}
+        {pending > 0 && <span className="muted"> · {pending.toLocaleString()} not yet indexed</span>}
+        {missing > 0 && (
+          <span className="muted"> · {missing.toLocaleString()} missing (removed)</span>
+        )}
+      </div>
+      {live > 0 && (
+        <ProgressBar value={indexed} max={live} label="files indexed in this location" />
+      )}
+
+      {/* 2. Latest scan — phrased so a per-scan delta is never read as the total. */}
+      {latest && <ScanActivity job={detail.data ?? latest} active={active} />}
+    </div>
+  );
+}
+
+function ScanActivity({ job, active }: { job: Job; active: boolean }) {
+  const summary = job.scan_summary;
+  const d = job.progress.detail;
+  const discovered = summary?.discovered ?? d?.discovered ?? 0;
+  const changed = summary?.changed ?? d?.changed ?? 0;
+  const indexedThisScan = summary?.indexed ?? 0;
+  const remaining = summary?.index_remaining ?? 0;
+  const stage = stageFor(job);
+  const err = errorLabel(job);
+
+  const hasBar = stage.kind === "discovering" || stage.kind === "indexing";
+  const indeterminate =
+    stage.kind === "waiting" ||
+    stage.kind === "reconciling" ||
+    (hasBar && (stage as { max: number }).max <= 0);
+
+  // One sentence describing what this run did, so "1 indexed" reads as a delta.
+  const delta =
+    discovered > 0
+      ? `This scan walked ${discovered.toLocaleString()} file(s): ` +
+        `${changed.toLocaleString()} new or changed, ` +
+        `${indexedThisScan.toLocaleString()} indexed` +
+        (remaining > 0 ? `, ${remaining.toLocaleString()} still indexing.` : ".")
+      : null;
+
+  return (
+    <div className="scan-activity">
       <div className="scan-progress-head">
+        <span className="muted">Latest scan:</span>
         <StatusPill status={job.status} />
         <span className="muted">elapsed {elapsed(job)}</span>
       </div>
       <p className="scan-action">{stage.label}</p>
-      {(hasBar || indeterminate) && (
+      {(hasBar || indeterminate) && active && (
         <ProgressBar
           value={hasBar ? (stage as { value: number }).value : 0}
           max={hasBar ? (stage as { max: number }).max : 0}
-          label="scan progress for this location"
+          label="current scan progress"
           indeterminate={indeterminate}
         />
       )}
-      <CountsRow
-        counts={[
-          { label: "discovered", value: discovered },
-          { label: "indexed", value: summary?.indexed ?? 0, tone: "up" },
-          { label: "changed", value: summary?.changed ?? d?.changed ?? 0 },
-          { label: "failed", value: failed, tone: failed > 0 ? "down" : "muted" },
-          { label: "missing", value: summary?.missing ?? d?.missing ?? 0, tone: "warn" },
-          { label: "remaining", value: summary?.index_remaining ?? 0 },
-        ]}
-      />
+      {delta && <p className="scan-delta muted">{delta}</p>}
       {err && (
         <p className="error" role="alert">
           {err}

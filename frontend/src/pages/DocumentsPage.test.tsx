@@ -42,8 +42,24 @@ function renderPage() {
   );
 }
 
+// The page fetches both /locations and /documents on render; return a fresh
+// Response per call (a Response body can only be read once) and route by URL.
+function locationsResponse() {
+  return new Response(
+    JSON.stringify({ data: [], page: { limit: 50, has_more: false, next_cursor: null } }),
+    { status: 200 },
+  );
+}
+function routedFetch() {
+  return (input: RequestInfo | URL) => {
+    const url = String(input);
+    if (url.includes("/api/v1/locations")) return Promise.resolve(locationsResponse());
+    return Promise.resolve(docsResponse());
+  };
+}
+
 test("lists documents and shows error detail on expand", async () => {
-  vi.spyOn(globalThis, "fetch").mockResolvedValue(docsResponse());
+  vi.spyOn(globalThis, "fetch").mockImplementation(routedFetch());
   renderPage();
 
   expect(await screen.findByText("locked.pdf")).toBeInTheDocument();
@@ -55,12 +71,15 @@ test("lists documents and shows error detail on expand", async () => {
 });
 
 test("reindex posts to the document reindex endpoint", async () => {
-  const fetchMock = vi
-    .spyOn(globalThis, "fetch")
-    .mockResolvedValueOnce(docsResponse())
-    .mockResolvedValue(
-      new Response(JSON.stringify({ data: { id: "job-9" }, meta: {} }), { status: 202 }),
-    );
+  const fetchMock = vi.spyOn(globalThis, "fetch").mockImplementation((input) => {
+    const url = String(input);
+    if (url.includes("/api/v1/locations")) return Promise.resolve(locationsResponse());
+    if (url.includes("/reindex"))
+      return Promise.resolve(
+        new Response(JSON.stringify({ data: { id: "job-9" }, meta: {} }), { status: 202 }),
+      );
+    return Promise.resolve(docsResponse());
+  });
   renderPage();
 
   const reindexButton = await screen.findByRole("button", { name: "Reindex" });

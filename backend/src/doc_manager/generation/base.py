@@ -48,17 +48,32 @@ class ProviderReadiness:
 
 
 @dataclass(frozen=True, slots=True)
+class ChatTurn:
+    """One prior conversation turn replayed to the provider for continuity.
+
+    ``role`` is ``"user"`` or ``"assistant"``; ``content`` is the plain text of
+    that turn (assistant turns carry their already-resolved ``[n]`` citations).
+    """
+
+    role: str
+    content: str
+
+
+@dataclass(frozen=True, slots=True)
 class GenerationRequest:
     """A fully-formed generation request. The RAG layer (5.e) builds it.
 
     ``system_prompt`` carries the grounding instructions and numbered evidence
     blocks; ``user_prompt`` is the question. Evidence text is already embedded —
-    the provider never resolves paths or citations itself.
+    the provider never resolves paths or citations itself. ``history`` is prior
+    conversation turns (oldest first) so a chat reply can build on earlier ones.
     """
 
     system_prompt: str
     user_prompt: str
     max_output_tokens: int
+    #: Prior conversation turns (oldest first), excluding the current question.
+    history: tuple[ChatTurn, ...] = ()
     #: Optional model override; must be a model the provider config exposes. When
     #: ``None`` the adapter uses its configured active model.
     model_id: str | None = None

@@ -16,8 +16,12 @@ class ExtractionErrorCode(StrEnum):
     malformed = "malformed"
     unsupported_encoding = "unsupported_encoding"
     #: The file parsed but yielded no extractable text — typically a scanned or
-    #: image-only PDF that would need OCR (a deferred adapter).
+    #: image-only PDF. Recoverable by enabling OCR (``DOCMAN_OCR_ENABLED``).
     no_extractable_text = "no_extractable_text"
+    #: OCR was enabled but the engine could not run (Tesseract missing/misconfigured
+    #: or a page crashed it). Distinct from ``no_extractable_text`` so the error
+    #: queue shows an engine problem, not an image-only document.
+    ocr_failed = "ocr_failed"
     #: No extractor is registered for this file's extension.
     unsupported_type = "unsupported_type"
 

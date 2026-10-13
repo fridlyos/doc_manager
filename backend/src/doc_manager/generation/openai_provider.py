@@ -92,11 +92,21 @@ class OpenAIProvider:
     async def generate(self, request: GenerationRequest) -> AsyncIterator[GenerationEvent]:
         client = self._client or self._make_client()
         model = request.model_id or self._model
+        # With prior turns, pass the conversation as a message list so the reply
+        # can build on it; otherwise the bare question string.
+        if request.history:
+            conversation: list[dict[str, str]] = [
+                {"role": t.role, "content": t.content} for t in request.history
+            ]
+            conversation.append({"role": "user", "content": request.user_prompt})
+            input_arg: object = conversation
+        else:
+            input_arg = request.user_prompt
         try:
             stream = await client.responses.create(
                 model=model,
                 instructions=request.system_prompt,
-                input=request.user_prompt,
+                input=input_arg,
                 max_output_tokens=request.max_output_tokens,
                 store=False,  # stateless; nothing retained server-side.
                 stream=True,

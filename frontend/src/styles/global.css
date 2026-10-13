@@ -344,6 +344,16 @@ code {
   margin-bottom: 1rem;
 }
 
+.doc-controls {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+  margin-bottom: 0.6rem;
+}
+.doc-search {
+  flex: 1 1 18rem;
+}
+
 .chip {
   padding: 0.25rem 0.7rem;
   font-size: 0.85rem;
@@ -462,6 +472,19 @@ button.danger {
   gap: 0.35rem;
 }
 
+/* Per-location details are collapsed by default and expand on request, so the
+   list stays a simple scannable table. */
+.location-details {
+  padding: 0.5rem 0.25rem;
+  display: flex;
+  flex-direction: column;
+  gap: 0.25rem;
+}
+
+.load-more {
+  margin-top: 0.75rem;
+}
+
 .scan-progress {
   margin-top: 0.5rem;
   padding: 0.6rem;
@@ -483,6 +506,25 @@ button.danger {
   margin: 0 0 0.5rem;
   font-weight: 600;
   font-size: 0.9rem;
+}
+.catalog-line {
+  font-size: 0.95rem;
+  margin-bottom: 0.4rem;
+}
+.catalog-line strong {
+  color: var(--up);
+}
+.catalog-bad {
+  color: var(--down);
+}
+.scan-activity {
+  margin-top: 0.75rem;
+  padding-top: 0.6rem;
+  border-top: 1px solid #22262e;
+}
+.scan-delta {
+  margin: 0.4rem 0 0;
+  font-size: 0.85rem;
 }
 .schedule {
   display: inline-flex;
@@ -648,6 +690,69 @@ button.danger {
 .answer-body {
   white-space: pre-wrap;
   line-height: 1.5;
+}
+
+/* Chat (Phase 11): transcript of alternating turns with an input row below. */
+.chat-head {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 1rem;
+}
+.chat-reset {
+  font-size: 0.85rem;
+}
+.chat-transcript {
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
+  margin: 1rem 0;
+  min-height: 8rem;
+}
+.chat-msg {
+  display: flex;
+}
+.chat-msg-user {
+  justify-content: flex-end;
+}
+.chat-msg-assistant {
+  justify-content: flex-start;
+}
+.chat-bubble {
+  max-width: 80%;
+  padding: 0.6rem 0.9rem;
+  border-radius: 0.6rem;
+  background: var(--panel);
+  border: 1px solid #22262e;
+}
+.chat-msg-user .chat-bubble {
+  background: #223049;
+  border-color: #2b3a52;
+}
+.chat-body {
+  white-space: pre-wrap;
+  line-height: 1.5;
+}
+.chat-form {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  flex-wrap: wrap;
+  border-top: 1px solid #22262e;
+  padding-top: 0.75rem;
+  position: sticky;
+  bottom: 0;
+  background: var(--bg);
+}
+.chat-provider {
+  display: flex;
+  align-items: center;
+  gap: 0.35rem;
+  font-size: 0.85rem;
+  color: var(--muted);
+}
+.chat-input {
+  flex: 1 1 20rem;
 }
 
 .citations {

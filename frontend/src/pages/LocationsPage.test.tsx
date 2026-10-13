@@ -1,7 +1,7 @@
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import { afterEach, expect, test, vi } from "vitest";
-import { LocationsPage, detectPathStyle } from "./LocationsPage";
+import { LocationsPage, detectPathStyle, windowsToContainer } from "./LocationsPage";
 
 afterEach(() => vi.restoreAllMocks());
 
@@ -41,6 +41,16 @@ test("detects path style from scan root shape", () => {
   expect(detectPathStyle("Z:\\Documents")).toBe("mapped_drive");
   expect(detectPathStyle("z:/Documents")).toBe("mapped_drive");
   expect(detectPathStyle("\\\\nas01\\documents")).toBe("unc");
+});
+
+test("maps C: drive paths onto the /hostfs mount, leaves others alone", () => {
+  expect(windowsToContainer("C:\\Users\\me\\Documents")).toBe("/hostfs/Users/me/Documents");
+  expect(windowsToContainer("c:/Users/me/Docs/")).toBe("/hostfs/Users/me/Docs");
+  expect(windowsToContainer("C:\\")).toBe("/hostfs");
+  // Non-C drives (network shares) and posix/UNC paths are stored as-is.
+  expect(windowsToContainer("Z:\\Documents")).toBeNull();
+  expect(windowsToContainer("/hostfs/Users/me")).toBeNull();
+  expect(windowsToContainer("\\\\nas01\\docs")).toBeNull();
 });
 
 test("lists locations and submits a new location", async () => {

@@ -117,7 +117,23 @@ export async function installMock(page: Page, scan: Record<string, unknown> | nu
     if (path === "/api/v1/jobs") {
       return json(collection(state.scanJob ? [state.scanJob] : []));
     }
-    if (path === "/api/v1/coverage") return json(resource([]));
+    if (path === "/api/v1/coverage") {
+      // Catalog state for the seeded location, shown as the panel's headline.
+      return json(
+        resource(
+          state.scanJob
+            ? [
+                {
+                  source_location_id: LOCATION.id,
+                  name: LOCATION.name,
+                  total: 1200,
+                  by_state: { indexed: 450, failed: 2, discovered: 748 },
+                },
+              ]
+            : [],
+        ),
+      );
+    }
     // Documents, errors, duplicates, sync-plans, etc. → empty collections.
     return json(collection([]));
   });

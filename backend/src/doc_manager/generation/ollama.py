@@ -86,12 +86,13 @@ class OllamaProvider:
 
     async def generate(self, request: GenerationRequest) -> AsyncIterator[GenerationEvent]:
         model = request.model_id or self._model
+        messages = [{"role": "system", "content": request.system_prompt}]
+        # Replay prior turns (oldest first) so the reply can build on them.
+        messages.extend({"role": t.role, "content": t.content} for t in request.history)
+        messages.append({"role": "user", "content": request.user_prompt})
         payload = {
             "model": model,
-            "messages": [
-                {"role": "system", "content": request.system_prompt},
-                {"role": "user", "content": request.user_prompt},
-            ],
+            "messages": messages,
             "stream": True,
             "options": {"num_ctx": self._num_ctx, "num_predict": request.max_output_tokens},
         }

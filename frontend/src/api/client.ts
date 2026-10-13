@@ -75,6 +75,9 @@ export type PathStyle = "linux" | "windows" | "unc" | "mapped_drive";
 export interface LocationCreate {
   name: string;
   scan_root: string;
+  // Human-facing path shown in the UI (e.g. the original Windows path) when the
+  // stored scan_root is the container mount path.
+  display_root?: string;
   path_style?: PathStyle;
   scan_interval_minutes?: number;
 }
@@ -340,11 +343,23 @@ export async function retryJob(jobId: string): Promise<Job> {
   return result.data;
 }
 
-export async function fetchDocuments(state?: DocumentState): Promise<Collection<DocumentSummary>> {
+export interface DocumentQuery {
+  state?: DocumentState;
+  name?: string;
+  locationId?: string;
+  cursor?: string;
+}
+
+export async function fetchDocuments(
+  query: DocumentQuery = {},
+): Promise<Collection<DocumentSummary>> {
   const params = new URLSearchParams();
-  if (state) params.set("filter[state]", state);
-  const query = params.toString();
-  return apiFetch(`/api/v1/documents${query ? `?${query}` : ""}`);
+  if (query.state) params.set("filter[state]", query.state);
+  if (query.name) params.set("filter[name]", query.name);
+  if (query.locationId) params.set("filter[source_location_id]", query.locationId);
+  params.set("limit", "100");
+  if (query.cursor) params.set("cursor", query.cursor);
+  return apiFetch(`/api/v1/documents?${params.toString()}`);
 }
 
 export async function fetchErrors(): Promise<Collection<DocumentSummary>> {
@@ -523,6 +538,11 @@ export interface AskResultData {
   };
 }
 
+export interface AskHistoryTurn {
+  role: "user" | "assistant";
+  content: string;
+}
+
 export interface AskRequestBody {
   question: string;
   provider_id: string;
@@ -530,6 +550,8 @@ export interface AskRequestBody {
   model_id?: string;
   filters?: { source_location_ids?: string[]; extensions?: string[] };
   retrieval?: { top_k?: number; score_threshold?: number };
+  // Prior conversation turns (oldest first) for chat continuity.
+  history?: AskHistoryTurn[];
 }
 
 export interface AskStreamEvent {

@@ -24,6 +24,20 @@ export function detectPathStyle(scanRoot: string): PathStyle {
   return "linux";
 }
 
+// The containers mount the host's system drive (C:) at /hostfs, so a C:\ path
+// maps onto it by dropping the drive letter:
+//   C:\Users\me\Docs  ->  /hostfs/Users/me/Docs
+// This lets a Windows user paste a familiar C:\ path instead of the posix mount
+// path. Only C: maps here — other drive letters (e.g. a Z: network share) use a
+// different mount, and posix/UNC paths are stored as-is. Returns null if the
+// input is not a C: drive path.
+export function windowsToContainer(input: string): string | null {
+  const m = /^[Cc]:[\\/](.*)$/.exec(input.trim());
+  if (!m) return null;
+  const rest = m[1].replace(/\\/g, "/").replace(/\/+$/, "");
+  return rest ? `/hostfs/${rest}` : "/hostfs";
+}
+
 const PATH_STYLE_LABELS: Record<PathStyle, string> = {
   linux: "Linux",
   windows: "Windows (local drive)",
@@ -34,6 +48,7 @@ const PATH_STYLE_LABELS: Record<PathStyle, string> = {
 function LocationRow({ location }: { location: SourceLocation }) {
   const queryClient = useQueryClient();
   const [confirmDelete, setConfirmDelete] = useState(false);
+  const [expanded, setExpanded] = useState(false);
   const [interval, setIntervalValue] = useState(String(location.scan_interval_minutes ?? ""));
   const [testResult, setTestResult] = useState<LocationTestResult | null>(null);
   const invalidate = () => queryClient.invalidateQueries({ queryKey: ["locations"] });
@@ -78,17 +93,32 @@ function LocationRow({ location }: { location: SourceLocation }) {
             : "never"}
         </td>
         <td className="row-actions">
-          <button disabled={scan.isPending} onClick={() => scan.mutate()}>
+          <button
+            disabled={scan.isPending}
+            onClick={() => {
+              setExpanded(true); // reveal progress as soon as a scan is queued
+              scan.mutate();
+            }}
+          >
             Scan
           </button>
-          <button disabled={reindex.isPending} onClick={() => reindex.mutate()}>
+          <button
+            disabled={reindex.isPending}
+            onClick={() => {
+              setExpanded(true);
+              reindex.mutate();
+            }}
+          >
             Re-index
           </button>
           <button disabled={toggle.isPending} onClick={() => toggle.mutate()}>
             {location.enabled ? "Disable" : "Enable"}
           </button>
-          <button disabled={test.isPending} onClick={() => test.mutate()}>
-            Test
+          <button
+            aria-expanded={expanded}
+            onClick={() => setExpanded((v) => !v)}
+          >
+            {expanded ? "Hide details" : "Details"}
           </button>
           <button
             className="danger"
@@ -99,42 +129,49 @@ function LocationRow({ location }: { location: SourceLocation }) {
           </button>
         </td>
       </tr>
-      <tr className="detail-row">
-        <td colSpan={5}>
-          <label className="schedule">
-            Scheduled scan every
-            <input
-              type="number"
-              min={1}
-              value={interval}
-              onChange={(e) => setIntervalValue(e.target.value)}
-              placeholder="off"
-              aria-label={`scan interval minutes for ${location.name}`}
-            />
-            minutes
-            <button disabled={saveSchedule.isPending} onClick={() => saveSchedule.mutate()}>
-              Save
-            </button>
-          </label>
-          {scan.isSuccess && <span className="notice"> Scan queued.</span>}
-          {reindex.isSuccess && <span className="notice"> Re-index queued.</span>}
-          {test.isError && <span className="error"> Test failed: {String(test.error)}</span>}
-          {testResult && (
-            <span className={testResult.ok ? "notice" : "error"}>
-              {" "}
-              Test {testResult.ok ? "passed" : "failed"}:{" "}
-              {testResult.checks.map((c) => `${c.name} ${c.ok ? "ok" : "FAIL"}`).join(", ")}
-            </span>
-          )}
-          {(toggle.isError || saveSchedule.isError || remove.isError) && (
-            <span className="error" role="alert">
-              {" "}
-              {String(toggle.error ?? saveSchedule.error ?? remove.error)}
-            </span>
-          )}
-          <ScanProgress locationId={location.id} />
-        </td>
-      </tr>
+      {expanded && (
+        <tr className="detail-row">
+          <td colSpan={5}>
+            <div className="location-details">
+              <label className="schedule">
+                Scheduled scan every
+                <input
+                  type="number"
+                  min={1}
+                  value={interval}
+                  onChange={(e) => setIntervalValue(e.target.value)}
+                  placeholder="off"
+                  aria-label={`scan interval minutes for ${location.name}`}
+                />
+                minutes
+                <button disabled={saveSchedule.isPending} onClick={() => saveSchedule.mutate()}>
+                  Save
+                </button>
+                <button disabled={test.isPending} onClick={() => test.mutate()}>
+                  Test reachability
+                </button>
+              </label>
+              {scan.isSuccess && <span className="notice"> Scan queued.</span>}
+              {reindex.isSuccess && <span className="notice"> Re-index queued.</span>}
+              {test.isError && <span className="error"> Test failed: {String(test.error)}</span>}
+              {testResult && (
+                <span className={testResult.ok ? "notice" : "error"}>
+                  {" "}
+                  Test {testResult.ok ? "passed" : "failed"}:{" "}
+                  {testResult.checks.map((c) => `${c.name} ${c.ok ? "ok" : "FAIL"}`).join(", ")}
+                </span>
+              )}
+              {(toggle.isError || saveSchedule.isError || remove.isError) && (
+                <span className="error" role="alert">
+                  {" "}
+                  {String(toggle.error ?? saveSchedule.error ?? remove.error)}
+                </span>
+              )}
+              <ScanProgress locationId={location.id} />
+            </div>
+          </td>
+        </tr>
+      )}
       {confirmDelete && (
         <ConfirmDialog
           title="Delete location"
@@ -198,10 +235,23 @@ export function LocationsPage() {
 
   function submit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
+    const raw = scanRoot.trim();
+    // A Windows drive path is stored as its /hostfs container equivalent, but the
+    // original is kept as display_root so the UI still shows the familiar path.
+    const container = windowsToContainer(raw);
+    if (container) {
+      create.mutate({
+        name,
+        scan_root: container,
+        display_root: raw,
+        path_style: "linux",
+      });
+      return;
+    }
     create.mutate({
       name,
-      scan_root: scanRoot,
-      path_style: pathStyle === "auto" ? detectPathStyle(scanRoot) : pathStyle,
+      scan_root: raw,
+      path_style: pathStyle === "auto" ? detectPathStyle(raw) : pathStyle,
     });
   }
 
@@ -210,10 +260,9 @@ export function LocationsPage() {
       <h2>Locations</h2>
       {capabilities.data && (
         <p className="notice">
-          Filesystem profile: <strong>{capabilities.data.filesystem_profile}</strong>
-          {capabilities.data.native_picker_available
-            ? " — Browse opens the native folder dialog."
-            : " — Browse opens the in-app directory browser."}
+          Filesystem profile: <strong>{capabilities.data.filesystem_profile}</strong> — Browse opens
+          the in-app directory browser. You can also paste a Windows path like{" "}
+          <code>C:\Users\you\Documents</code>; it is mapped to the mounted drive automatically.
         </p>
       )}
       <form className="create-form" onSubmit={submit}>
@@ -227,7 +276,7 @@ export function LocationsPage() {
             <input
               value={scanRoot}
               onChange={(event) => setScanRoot(event.target.value)}
-              placeholder="Z:\Documents or /sources/documents"
+              placeholder="C:\Users\you\Documents"
               required
             />
             <button type="button" disabled={nativePick.isPending} onClick={openFolderPicker}>
@@ -235,6 +284,11 @@ export function LocationsPage() {
             </button>
           </span>
         </label>
+        {windowsToContainer(scanRoot) && (
+          <p className="notice path-map-hint">
+            Maps to <code>{windowsToContainer(scanRoot)}</code> inside the containers.
+          </p>
+        )}
         <label>
           Path style
           <select

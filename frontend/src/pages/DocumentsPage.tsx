@@ -1,6 +1,17 @@
-import { useState } from "react";
-import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { DocumentState, DocumentSummary, fetchDocuments, reindexDocument } from "../api/client";
+import { useEffect, useState } from "react";
+import {
+  useInfiniteQuery,
+  useMutation,
+  useQuery,
+  useQueryClient,
+} from "@tanstack/react-query";
+import {
+  DocumentState,
+  DocumentSummary,
+  fetchDocuments,
+  fetchLocations,
+  reindexDocument,
+} from "../api/client";
 
 const STATE_FILTERS: { value: DocumentState | "all"; label: string }[] = [
   { value: "all", label: "All" },
@@ -27,13 +38,33 @@ function formatBytes(bytes: number | null): string {
 export function DocumentsPage() {
   const queryClient = useQueryClient();
   const [state, setState] = useState<DocumentState | "all">("all");
+  const [locationId, setLocationId] = useState("");
+  const [searchInput, setSearchInput] = useState("");
+  const [search, setSearch] = useState("");
   const [expanded, setExpanded] = useState<string | null>(null);
 
-  const documents = useQuery({
-    queryKey: ["documents", state],
-    queryFn: () => fetchDocuments(state === "all" ? undefined : state),
-    refetchInterval: 5_000,
+  // Debounce the name search so typing doesn't fire a request per keystroke.
+  useEffect(() => {
+    const t = setTimeout(() => setSearch(searchInput.trim()), 300);
+    return () => clearTimeout(t);
+  }, [searchInput]);
+
+  const locations = useQuery({ queryKey: ["locations"], queryFn: fetchLocations });
+
+  const documents = useInfiniteQuery({
+    queryKey: ["documents", state, search, locationId],
+    queryFn: ({ pageParam }) =>
+      fetchDocuments({
+        state: state === "all" ? undefined : state,
+        name: search || undefined,
+        locationId: locationId || undefined,
+        cursor: pageParam,
+      }),
+    initialPageParam: undefined as string | undefined,
+    getNextPageParam: (last) => last.page.next_cursor ?? undefined,
+    refetchInterval: 10_000,
   });
+  const rows = documents.data?.pages.flatMap((p) => p.data) ?? [];
 
   const reindex = useMutation({
     mutationFn: reindexDocument,
@@ -45,6 +76,28 @@ export function DocumentsPage() {
   return (
     <section>
       <h2>Documents</h2>
+      <div className="doc-controls">
+        <input
+          className="doc-search"
+          type="search"
+          value={searchInput}
+          onChange={(e) => setSearchInput(e.target.value)}
+          placeholder="Search by file name…"
+          aria-label="Search documents by file name"
+        />
+        <select
+          value={locationId}
+          onChange={(e) => setLocationId(e.target.value)}
+          aria-label="Filter by location"
+        >
+          <option value="">All locations</option>
+          {locations.data?.data.map((loc) => (
+            <option key={loc.id} value={loc.id}>
+              {loc.name}
+            </option>
+          ))}
+        </select>
+      </div>
       <div className="filter-bar">
         {STATE_FILTERS.map((option) => (
           <button
@@ -62,34 +115,49 @@ export function DocumentsPage() {
       {documents.isError && (
         <p className="error">Unable to load documents: {String(documents.error)}</p>
       )}
-      {documents.data?.data.length === 0 && (
+      {!documents.isLoading && rows.length === 0 && (
         <p className="empty">No documents match this filter.</p>
       )}
-      {documents.data && documents.data.data.length > 0 && (
-        <table className="resources">
-          <thead>
-            <tr>
-              <th>Name</th>
-              <th>Type</th>
-              <th>State</th>
-              <th>Size</th>
-              <th>Modified</th>
-              <th />
-            </tr>
-          </thead>
-          <tbody>
-            {documents.data.data.map((doc) => (
-              <DocumentRow
-                key={doc.id}
-                doc={doc}
-                expanded={expanded === doc.id}
-                onToggle={() => setExpanded(expanded === doc.id ? null : doc.id)}
-                onReindex={() => reindex.mutate(doc.id)}
-                reindexing={reindex.isPending && reindex.variables === doc.id}
-              />
-            ))}
-          </tbody>
-        </table>
+      {rows.length > 0 && (
+        <>
+          <p className="notice">
+            Showing {rows.length.toLocaleString()} document{rows.length === 1 ? "" : "s"}
+            {documents.hasNextPage ? " (more available)" : ""}.
+          </p>
+          <table className="resources">
+            <thead>
+              <tr>
+                <th>Name</th>
+                <th>Type</th>
+                <th>State</th>
+                <th>Size</th>
+                <th>Modified</th>
+                <th />
+              </tr>
+            </thead>
+            <tbody>
+              {rows.map((doc) => (
+                <DocumentRow
+                  key={doc.id}
+                  doc={doc}
+                  expanded={expanded === doc.id}
+                  onToggle={() => setExpanded(expanded === doc.id ? null : doc.id)}
+                  onReindex={() => reindex.mutate(doc.id)}
+                  reindexing={reindex.isPending && reindex.variables === doc.id}
+                />
+              ))}
+            </tbody>
+          </table>
+          {documents.hasNextPage && (
+            <button
+              className="load-more"
+              disabled={documents.isFetchingNextPage}
+              onClick={() => documents.fetchNextPage()}
+            >
+              {documents.isFetchingNextPage ? "Loading…" : "Load more"}
+            </button>
+          )}
+        </>
       )}
     </section>
   );

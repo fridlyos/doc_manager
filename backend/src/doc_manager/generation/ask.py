@@ -24,7 +24,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from doc_manager.core.config import Settings
 from doc_manager.db.models import SourceLocation
-from doc_manager.generation.base import DataBoundary, GenerationProvider
+from doc_manager.generation.base import ChatTurn, DataBoundary, GenerationProvider
 from doc_manager.generation.boundary import (
     DataBoundaryReport,
     confirmation_summary,
@@ -64,6 +64,9 @@ class AskRequest:
     top_k: int | None = None
     score_threshold: float | None = None
     model_id: str | None = None
+    #: Prior conversation turns (oldest first) for chat continuity. Retrieval is
+    #: still keyed on the current question; history only conditions the reply.
+    history: tuple[ChatTurn, ...] = ()
 
 
 @dataclass(slots=True)
@@ -184,6 +187,10 @@ class AskService:
             question=request.question,
             evidence=prep.evidence,
             max_output_tokens=prep.max_output_tokens,
+            history=request.history,
+            # File names may only be shown to the local provider; the external
+            # data boundary forbids sending paths/names.
+            include_source_names=provider.data_boundary is DataBoundary.local,
         )
         parts: list[str] = []
         usage: Usage | None = None
@@ -308,6 +315,10 @@ class AskService:
             question=request.question,
             evidence=prep.evidence,
             max_output_tokens=prep.max_output_tokens,
+            history=request.history,
+            # File names may only be shown to the local provider; the external
+            # data boundary forbids sending paths/names.
+            include_source_names=provider.data_boundary is DataBoundary.local,
         )
         parts: list[str] = []
         usage: Usage | None = None
