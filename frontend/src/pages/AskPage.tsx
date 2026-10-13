@@ -1,4 +1,4 @@
-import { FormEvent, useMemo, useRef, useState } from "react";
+import { FormEvent, useEffect, useMemo, useRef, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import {
   AskCitation,
@@ -63,6 +63,16 @@ export function AskPage() {
   // The turn awaiting an external-processing acknowledgement (question + the
   // history as it stood when first asked), so the retry sends the same context.
   const pending = useRef<{ question: string; history: AskHistoryTurn[] } | null>(null);
+  // Anchor at the end of the transcript; keep the newest turn in view so a fresh
+  // answer (or streaming delta) doesn't require a manual scroll down.
+  const endRef = useRef<HTMLDivElement>(null);
+  useEffect(() => {
+    try {
+      endRef.current?.scrollIntoView({ behavior: "smooth", block: "end" });
+    } catch {
+      // scrollIntoView is unimplemented under jsdom (tests) and old browsers.
+    }
+  }, [messages, deltas, streaming, confirmation]);
 
   const eligible = useMemo(
     () => (providers.data ?? []).filter((p) => p.eligible),
@@ -155,18 +165,33 @@ export function AskPage() {
 
   return (
     <section className="chat">
-      <div className="chat-head">
-        <h2>Chat</h2>
-        {messages.length > 0 && (
-          <button type="button" className="chat-reset" onClick={newChat} disabled={streaming}>
-            New chat
-          </button>
-        )}
-      </div>
-      <p className="notice">
-        A conversation grounded in your indexed documents — each reply builds on the previous ones,
-        with citations resolved locally.
-      </p>
+      <header className="chat-head">
+        <div className="chat-title">
+          <h2>Chat</h2>
+          <p className="chat-sub">Answers only from your indexed documents, cited locally.</p>
+        </div>
+        <div className="chat-controls">
+          <label className="chat-provider">
+            Provider
+            <select value={providerId} onChange={(e) => setProviderId(e.target.value)}>
+              {eligible.length === 0 && <option value="">No provider available</option>}
+              {eligible.map((p) => (
+                <option key={p.provider_id} value={p.provider_id}>
+                  {p.provider_id}
+                </option>
+              ))}
+            </select>
+          </label>
+          <span className={`badge boundary-${boundary}`} aria-label={`data boundary ${boundary}`}>
+            {boundary === "external" ? "External" : "Local"}
+          </span>
+          {messages.length > 0 && (
+            <button type="button" className="chat-reset" onClick={newChat} disabled={streaming}>
+              New chat
+            </button>
+          )}
+        </div>
+      </header>
 
       {providers.isError && (
         <p className="error" role="alert">
@@ -180,6 +205,7 @@ export function AskPage() {
         )}
         {messages.map((m, i) => (
           <div key={i} className={`chat-msg chat-msg-${m.role}`}>
+            <span className="chat-role">{m.role === "user" ? "You" : "Assistant"}</span>
             <div className="chat-bubble">
               <div className="chat-body">{m.content || <em>…</em>}</div>
               {m.role === "assistant" && m.status === "insufficient_evidence" && (
@@ -200,11 +226,13 @@ export function AskPage() {
         ))}
         {streaming && !confirmation && (
           <div className="chat-msg chat-msg-assistant">
+            <span className="chat-role">Assistant</span>
             <div className="chat-bubble" aria-busy="true">
-              <div className="chat-body">{deltas || "…"}</div>
+              <div className="chat-body">{deltas || <span className="chat-typing">…</span>}</div>
             </div>
           </div>
         )}
+        <div ref={endRef} aria-hidden="true" />
       </div>
 
       {confirmation && (
@@ -228,20 +256,6 @@ export function AskPage() {
       )}
 
       <form className="chat-form" onSubmit={submit}>
-        <label className="chat-provider">
-          Provider
-          <select value={providerId} onChange={(e) => setProviderId(e.target.value)}>
-            {eligible.length === 0 && <option value="">No provider available</option>}
-            {eligible.map((p) => (
-              <option key={p.provider_id} value={p.provider_id}>
-                {p.provider_id}
-              </option>
-            ))}
-          </select>
-        </label>
-        <span className={`badge boundary-${boundary}`} aria-label={`data boundary ${boundary}`}>
-          {boundary === "external" ? "External" : "Local"}
-        </span>
         <input
           className="chat-input"
           value={question}
