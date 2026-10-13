@@ -532,7 +532,7 @@ Result rules:
 - `similarity_score` is meaningful only within the active embedding profile; higher is better, but clients must not compare values across profiles.
 - `availability` is `current`, `missing`, or `historical`. Every citation has at least one locally resolved path or is explicitly marked missing/historical.
 - Paths, pages, snippets, and catalog IDs are resolved by the server from PostgreSQL evidence. Provider-generated paths are ignored.
-- The provider receives request-scoped aliases such as `E1`; it never receives `chunk_id`, catalog IDs, paths, filenames, tags, or source names. The server maps valid aliases to citations and converts answer markers to `[1]`. Unknown aliases are removed as citations and add `unknown_provider_citation_removed` to `warnings`.
+- The provider receives request-scoped aliases such as `E1`; it never receives `chunk_id`, catalog IDs, paths, filenames, tags, or source names. The server maps valid aliases to citations and converts answer markers to `[1]`. Unknown aliases are removed as citations and add `unknown_provider_citation_removed` to `warnings`. Before mapping, a marker whose claim text clearly comes from a different evidence block (by content-word overlap) is re-pointed to that block and adds `provider_citation_corrected`; grouped markers such as `[E1][E2]` are left as written.
 - For an external provider, `classification` is `external`. Once the HTTP client begins writing the provider request, both `external_request_attempted` and the conservatively named `external_transfer_occurred` are true even if the upstream response later fails. The payload summary reports the fields/counts actually attempted and all metadata/file counters remain zero.
 
 ### 8.3 Streaming Ask over SSE

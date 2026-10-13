@@ -23,7 +23,7 @@ from dataclasses import dataclass, field
 
 from doc_manager.chunking.tokenizer import DEFAULT_TOKENIZER, Tokenizer
 from doc_manager.generation.base import ChatTurn, GenerationRequest
-from doc_manager.retrieval.service import ResolvedPath, SearchResult
+from doc_manager.retrieval.service import ResolvedPath, SearchResult, content_terms
 
 #: The model is told to emit this exact token when the evidence cannot support an
 #: answer, so the Ask layer can return ``insufficient_evidence`` deterministically.
@@ -32,7 +32,18 @@ INSUFFICIENT_MARKER = "INSUFFICIENT_EVIDENCE"
 #: Warning code when the model cites an alias that was not in the evidence set.
 UNKNOWN_CITATION_WARNING = "unknown_provider_citation_removed"
 
+#: Warning code when a citation was re-pointed to the block its claim came from.
+CORRECTED_CITATION_WARNING = "provider_citation_corrected"
+
 _ALIAS_RE = re.compile(r"\[E(\d+)\]")
+_CLAIM_BREAK_RE = re.compile(r"(?:[.!?]\s|\n)")
+
+#: Citation correction thresholds. A claim needs this many content words to be
+#: judged, the better block must contain this share of them, and it must beat the
+#: cited block by this margin. Conservative: only clear mis-tags are rewritten.
+_MIN_CLAIM_TERMS = 3
+_MIN_BEST_COVERAGE = 0.6
+_MIN_COVERAGE_GAIN = 0.3
 
 SYSTEM_INSTRUCTIONS = (
     "You are a document assistant for this user's own document library. The "
@@ -217,13 +228,87 @@ def build_grounded_prompt(
     )
 
 
+def _coverage(claim: set[str], block_terms: set[str]) -> float:
+    return len(claim & block_terms) / len(claim)
+
+
+def _claim_before(segment: str) -> set[str]:
+    """Content words of the sentence a trailing tag closes (``... claim [E1].``)."""
+    segment = segment.rstrip(" \t.!?;:,")
+    breaks = list(_CLAIM_BREAK_RE.finditer(segment))
+    return set(content_terms(segment[breaks[-1].end() :] if breaks else segment))
+
+
+def _claim_after(segment: str) -> set[str]:
+    """Content words of the sentence a leading tag opens (``[E1] claim.``)."""
+    first = _CLAIM_BREAK_RE.search(segment)
+    return set(content_terms(segment[: first.start() + 1] if first else segment))
+
+
+def _starts_line(before: str) -> bool:
+    """True when only whitespace or list/quote markup precedes the tag on its line."""
+    return not before.rsplit("\n", 1)[-1].strip(" \t-*>#0123456789.)")
+
+
+def _correct_misattributed(answer: str, evidence: EvidenceSet) -> tuple[str, bool]:
+    """Re-point ``[E#]`` tags whose claim plainly came from a different block.
+
+    Small local models sometimes copy a sentence from one evidence block and tag
+    it with a neighbour's alias, so the citation shows the wrong file. Each tag's
+    claim is the text between the previous tag (or sentence break) and the tag,
+    or for a tag opening a line, the sentence after it. If another block contains
+    clearly more of the claim's content words than the cited block, the tag is
+    moved there. Grouped tags (``[E1][E2]``) are left
+    alone — the model meant several sources and there is no single claim per tag.
+    """
+    terms = {b.alias: set(content_terms(b.text)) for b in evidence.blocks}
+    matches = list(_ALIAS_RE.finditer(answer))
+    if len(terms) < 2 or not matches:
+        return answer, False
+
+    pieces: list[str] = []
+    cursor = 0
+    corrected = False
+    for i, match in enumerate(matches):
+        pieces.append(answer[cursor : match.start()])
+        cursor = match.end()
+        alias = f"E{match.group(1)}"
+        prev_end = matches[i - 1].end() if i else 0
+        next_start = matches[i + 1].start() if i + 1 < len(matches) else len(answer)
+        grouped = (i and not answer[prev_end : match.start()].strip()) or (
+            next_start < len(answer) and not answer[match.end() : next_start].strip()
+        )
+        replacement = alias
+        if alias in terms and not grouped:
+            claim = _claim_before(answer[prev_end : match.start()])
+            if len(claim) < _MIN_CLAIM_TERMS and _starts_line(answer[: match.start()]):
+                claim = _claim_after(answer[match.end() : next_start])
+            if len(claim) >= _MIN_CLAIM_TERMS:
+                cited = _coverage(claim, terms[alias])
+                best = max(terms, key=lambda a: _coverage(claim, terms[a]))
+                best_cov = _coverage(claim, terms[best])
+                if (
+                    best != alias
+                    and best_cov >= _MIN_BEST_COVERAGE
+                    and best_cov - cited >= _MIN_COVERAGE_GAIN
+                ):
+                    replacement = best
+                    corrected = True
+        pieces.append(f"[{replacement}]")
+    pieces.append(answer[cursor:])
+    return "".join(pieces), corrected
+
+
 def map_citations(answer: str, evidence: EvidenceSet) -> CitationMapping:
     """Rewrite ``[E#]`` markers to ordinals and build server-owned citations.
 
     Aliases the model invents (not in the evidence set) are removed and reported
-    with ``unknown_provider_citation_removed``. Citations are ordered by first
-    appearance in the answer; unused evidence blocks are not cited.
+    with ``unknown_provider_citation_removed``; tags whose claim clearly came from
+    another block are re-pointed first (``provider_citation_corrected``).
+    Citations are ordered by first appearance in the answer; unused evidence
+    blocks are not cited.
     """
+    answer, corrected = _correct_misattributed(answer, evidence)
     by_alias = {block.alias: block for block in evidence.blocks}
     ordinal_of: dict[str, int] = {}
     citations: list[Citation] = []
@@ -256,6 +341,8 @@ def map_citations(answer: str, evidence: EvidenceSet) -> CitationMapping:
 
     rewritten = _ALIAS_RE.sub(replace, answer)
     warnings = [UNKNOWN_CITATION_WARNING] if unknown_seen else []
+    if corrected:
+        warnings.append(CORRECTED_CITATION_WARNING)
     return CitationMapping(answer=rewritten, citations=citations, warnings=warnings)
 
 

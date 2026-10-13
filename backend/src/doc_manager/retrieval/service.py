@@ -134,6 +134,12 @@ _POSSESSIVE_RE = re.compile(r"['’]s\b", re.UNICODE)
 _WORD_RE = re.compile(r"[^\W_]{2,}", re.UNICODE)
 
 
+def content_terms(text: str) -> list[str]:
+    """Lowercased words of ``text`` with possessives and stopwords removed."""
+    base = _POSSESSIVE_RE.sub("", text.lower())
+    return [t for t in _WORD_RE.findall(base) if t not in _KEYWORD_STOPWORDS]
+
+
 def expand_keyword_query(query: str) -> str:
     """Query string for the keyword (hybrid) leg: possessives and stopwords stripped,
     synonyms added.
@@ -142,8 +148,7 @@ def expand_keyword_query(query: str) -> str:
     leg keeps using the untouched question, so synonyms only ever *widen* which
     chunks the keyword leg can match — they never move the semantic anchor.
     """
-    base = _POSSESSIVE_RE.sub("", query.lower())
-    terms = [t for t in _WORD_RE.findall(base) if t not in _KEYWORD_STOPWORDS]
+    terms = content_terms(query)
     expanded = list(terms)
     for term in terms:
         for synonym in _KEYWORD_SYNONYMS.get(term, ()):

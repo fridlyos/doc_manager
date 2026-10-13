@@ -8,6 +8,7 @@ invented aliases, untrusted-evidence framing).
 from __future__ import annotations
 
 from doc_manager.generation.rag import (
+    CORRECTED_CITATION_WARNING,
     INSUFFICIENT_MARKER,
     SYSTEM_INSTRUCTIONS,
     UNKNOWN_CITATION_WARNING,
@@ -188,3 +189,76 @@ def test_evidence_source_policies_defaults_deny_for_unknown() -> None:
 def test_is_insufficient() -> None:
     assert is_insufficient(f"  {INSUFFICIENT_MARKER}  ")
     assert not is_insufficient("The office opens at 9am [E1].")
+
+
+def _lease_and_invoice() -> EvidenceSet:
+    return select_evidence(
+        [
+            _result(
+                chunk="lease",
+                content="c1",
+                text="INSURANCE. Tenant is required to obtain renter's insurance before "
+                "moving in. Lessor, Three Wheels RE LLC, shall be listed as additional insured.",
+            ),
+            _result(
+                chunk="invoice",
+                content="c2",
+                text="Evidence of insurance invoice for 3429 Emerald Street. Premium due "
+                "on renewal; contact your broker with questions.",
+            ),
+        ],
+        token_budget=500,
+        max_per_content=3,
+        max_blocks=10,
+    )
+
+
+def test_map_citations_repoints_tag_to_block_the_claim_came_from() -> None:
+    # Regression: llama3.1 quoted the lease clause but tagged it with the invoice.
+    ev = _lease_and_invoice()
+    mapping = map_citations(
+        "Tenant must obtain renter's insurance before moving in; Three Wheels RE LLC "
+        "listed as additional insured [E2].",
+        ev,
+    )
+    assert [c.chunk_id for c in mapping.citations] == ["lease"]
+    assert mapping.answer.endswith("additional insured [1].")
+    assert CORRECTED_CITATION_WARNING in mapping.warnings
+
+
+def test_map_citations_repoints_leading_tag() -> None:
+    # The model also emits the tag before the sentence it supports.
+    ev = _lease_and_invoice()
+    mapping = map_citations(
+        "[E2] Tenant is required to obtain renter's insurance before moving in. "
+        "Three Wheels RE LLC listed as additional insured.",
+        ev,
+    )
+    assert [c.chunk_id for c in mapping.citations] == ["lease"]
+    assert mapping.answer.startswith("[1] Tenant")
+
+
+def test_map_citations_keeps_correct_tag() -> None:
+    ev = _lease_and_invoice()
+    mapping = map_citations("Invoice covers 3429 Emerald Street, premium due on renewal [E2].", ev)
+    assert [c.chunk_id for c in mapping.citations] == ["invoice"]
+    assert mapping.warnings == []
+
+
+def test_map_citations_judges_each_sentence_separately() -> None:
+    ev = _lease_and_invoice()
+    mapping = map_citations(
+        "Tenant must obtain renter's insurance before moving in [E1]. "
+        "Invoice for 3429 Emerald Street, premium due on renewal [E2].",
+        ev,
+    )
+    assert [c.chunk_id for c in mapping.citations] == ["lease", "invoice"]
+    assert mapping.warnings == []
+
+
+def test_map_citations_leaves_grouped_and_short_claims_alone() -> None:
+    ev = _lease_and_invoice()
+    grouped = map_citations("Tenant must obtain renter's insurance before moving in [E2][E1].", ev)
+    assert [c.chunk_id for c in grouped.citations] == ["invoice", "lease"]
+    short = map_citations("Renter's insurance [E2].", ev)  # too few words to judge
+    assert [c.chunk_id for c in short.citations] == ["invoice"]
