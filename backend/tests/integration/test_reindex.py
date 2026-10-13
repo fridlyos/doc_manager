@@ -265,3 +265,40 @@ async def test_reindex_scope_all_covers_every_location(
             )
         ).one()
     assert enqueued == 2  # one per entry across both locations
+
+
+async def test_bulk_reindex_skips_broken_files(
+    tmp_path: Path,
+    db_engine: AsyncEngine,
+    session_factory: async_sessionmaker[AsyncSession],
+    idx_env: object,
+) -> None:
+    (tmp_path / "good.txt").write_text("alpha content here")
+    (tmp_path / "broken.pdf").write_bytes(b"%PDF-1.4 not really a pdf")
+    location = await _make_location(session_factory, tmp_path)
+    engine = JobEngine()
+    await _scan_and_index(engine, db_engine, session_factory, location)
+
+    async with session_factory() as session:
+        await engine.enqueue(
+            session,
+            job_type=JobType.reindex_all_for_profile,
+            payload={"version": 1, "scope": "location", "source_location_id": str(location)},
+            origin=JobOrigin.api,
+            source_location_id=location,
+        )
+        await session.commit()
+    assert await _run_one(engine, db_engine) == JobType.reindex_all_for_profile.value
+
+    async with session_factory() as session:
+        queued = (
+            await session.scalars(
+                select(CatalogEntry.relative_path)
+                .join(IngestionJob, IngestionJob.catalog_entry_id == CatalogEntry.id)
+                .where(
+                    IngestionJob.job_type == JobType.index_file.value,
+                    IngestionJob.status == JobStatus.queued.value,
+                )
+            )
+        ).all()
+    assert queued == ["good.txt"]

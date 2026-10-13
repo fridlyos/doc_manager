@@ -26,6 +26,19 @@ class ExtractionErrorCode(StrEnum):
     unsupported_type = "unsupported_type"
 
 
+#: Failures that describe the file itself, not the environment: the same bytes
+#: will always fail the same way. A file with one of these codes is never
+#: extracted again until its content (SHA-256) changes. ``no_extractable_text``
+#: and ``ocr_failed`` are excluded — enabling or fixing OCR can recover them.
+UNRECOVERABLE_CODES = frozenset(
+    {
+        ExtractionErrorCode.empty_file.value,
+        ExtractionErrorCode.encrypted.value,
+        ExtractionErrorCode.malformed.value,
+    }
+)
+
+
 class ExtractionError(Exception):
     """Raised by an extractor for a per-document, isolatable failure."""
 

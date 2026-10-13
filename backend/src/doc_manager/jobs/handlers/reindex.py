@@ -19,12 +19,13 @@ from __future__ import annotations
 
 import uuid
 
-from sqlalchemy import select
+from sqlalchemy import or_, select
 
 from doc_manager.core.config import get_settings
 from doc_manager.core.logging import get_logger
-from doc_manager.db.models import CatalogEntry
+from doc_manager.db.models import CatalogEntry, FileVersion
 from doc_manager.domain.enums import CatalogEntryState, JobOrigin, JobType
+from doc_manager.extraction.errors import UNRECOVERABLE_CODES
 from doc_manager.jobs.context import JobContext
 from doc_manager.jobs.errors import PermanentJobError
 
@@ -52,9 +53,19 @@ async def handle_reindex_bulk(ctx: JobContext) -> None:
     # empty vector store is never repopulated.
     rebuild_vectors = bool(payload.get("rebuild_vectors", False))
 
-    stmt = select(CatalogEntry.id).where(
-        CatalogEntry.sha256.is_not(None),
-        CatalogEntry.state.in_(_REINDEXABLE),
+    # Broken files (corrupt/encrypted/empty) are excluded for good; index_file
+    # would refuse them anyway, so don't even queue a job.
+    stmt = (
+        select(CatalogEntry.id)
+        .outerjoin(FileVersion, FileVersion.id == CatalogEntry.current_file_version_id)
+        .where(
+            CatalogEntry.sha256.is_not(None),
+            CatalogEntry.state.in_(_REINDEXABLE),
+            or_(
+                FileVersion.error_code.is_(None),
+                FileVersion.error_code.not_in(UNRECOVERABLE_CODES),
+            ),
+        )
     )
     if scope == "location":
         if job.source_location_id is None:

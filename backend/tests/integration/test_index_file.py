@@ -11,11 +11,19 @@ from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncEngine, AsyncSession, async_sessionmaker
 
 from doc_manager.core.config import Settings
-from doc_manager.db.models import CatalogEntry, Chunk, ContentObject, FileVersion, SourceLocation
+from doc_manager.db.models import (
+    CatalogEntry,
+    Chunk,
+    ContentObject,
+    FileVersion,
+    IngestionJob,
+    SourceLocation,
+)
 from doc_manager.domain.enums import (
     CatalogEntryState,
     ExtractionStatus,
     JobOrigin,
+    JobStatus,
     JobType,
 )
 from doc_manager.jobs.context import JobContext
@@ -297,3 +305,91 @@ async def test_reindex_creates_no_duplicate_chunks_or_points(
         second_chunks = (await session.scalars(select(func.count()).select_from(Chunk))).one()
     second_points = await _count_points(vector_env.client, collection)  # type: ignore[attr-defined]
     assert (second_chunks, second_points) == (first_chunks, first_points)
+
+
+async def test_broken_pdf_is_never_extracted_again(
+    tmp_path: Path,
+    db_engine: AsyncEngine,
+    session_factory: async_sessionmaker[AsyncSession],
+    artifact_root: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    from doc_manager.jobs.handlers import index_file as index_mod
+
+    calls: list[str] = []
+    real_get_extractor = index_mod.get_extractor
+
+    def counting_get_extractor(extension: str, **kwargs: object) -> object:
+        calls.append(extension)
+        return real_get_extractor(extension, **kwargs)  # type: ignore[arg-type]
+
+    monkeypatch.setattr(index_mod, "get_extractor", counting_get_extractor)
+
+    (tmp_path / "broken.pdf").write_bytes(b"%PDF-1.4 this is not really a pdf")
+    location = await _make_location(session_factory, tmp_path)
+    engine = JobEngine()
+    await _scan_and_index(engine, db_engine, session_factory, location.id)
+    assert calls == ["pdf"]
+
+    async def reindex(entry_id: uuid.UUID) -> None:
+        async with session_factory() as session:
+            await engine.enqueue(
+                session,
+                job_type=JobType.index_file,
+                payload={"version": 1, "catalog_entry_id": str(entry_id)},
+                origin=JobOrigin.api,
+                catalog_entry_id=entry_id,
+            )
+            await session.commit()
+        await _drain(engine, db_engine)
+
+    async with session_factory() as session:
+        entry = (await _entries(session, location.id))["broken.pdf"]
+        assert entry.state == CatalogEntryState.failed.value
+
+    # Explicit retry of the same file: refused without opening it.
+    await reindex(entry.id)
+    # A copy with identical bytes under another name: also refused.
+    (tmp_path / "broken copy.pdf").write_bytes((tmp_path / "broken.pdf").read_bytes())
+    await _scan_and_index(engine, db_engine, session_factory, location.id)
+    assert calls == ["pdf"]
+
+    async with session_factory() as session:
+        entries = await _entries(session, location.id)
+        assert entries["broken copy.pdf"].state == CatalogEntryState.failed.value
+        codes = (
+            await session.scalars(
+                select(FileVersion.error_code).where(
+                    FileVersion.catalog_entry_id.in_([e.id for e in entries.values()])
+                )
+            )
+        ).all()
+    assert set(codes) == {"malformed"}
+
+    # Changed content is a different file: it gets a fresh attempt. (The harness
+    # leaves failed jobs open where the real worker would close them; close them
+    # so the rescan's index job is not coalesced onto a dead one.)
+    async with session_factory() as session:
+        running = (
+            await session.scalars(
+                select(IngestionJob).where(IngestionJob.status == JobStatus.running.value)
+            )
+        ).all()
+        for job in running:
+            assert job.lease_token is not None
+            await engine.fail_permanent(
+                session,
+                job,
+                worker_id="w",
+                lease_token=job.lease_token,
+                code="malformed",
+                message="broken",
+            )
+        await session.commit()
+    _pdf(tmp_path / "broken.pdf", ["now a real pdf"])
+    await _scan_and_index(engine, db_engine, session_factory, location.id)
+    assert calls == ["pdf", "pdf"]
+    async with session_factory() as session:
+        assert (await _entries(session, location.id))[
+            "broken.pdf"
+        ].state == CatalogEntryState.indexed.value

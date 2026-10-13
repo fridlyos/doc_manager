@@ -50,6 +50,7 @@ from doc_manager.db.session import db_now
 from doc_manager.domain.enums import CatalogEntryState, ExtractionStatus, JobStatus
 from doc_manager.embedding import EmbeddingProfile, build_embedding_service
 from doc_manager.extraction import ExtractionError, Extractor, get_extractor
+from doc_manager.extraction.errors import UNRECOVERABLE_CODES
 from doc_manager.extraction.normalize import NormalizedDocument, normalize
 from doc_manager.extraction.profile import extraction_profile_hash
 from doc_manager.jobs.context import JobContext
@@ -92,6 +93,24 @@ async def handle_index_file(ctx: JobContext) -> None:
         # will re-observe and re-enqueue (TECHSTACK 7.2).
         raise TransientJobError("fingerprint_changed", "file changed during indexing")
     ctx.check_boundary()
+
+    # Broken files (corrupt, encrypted, empty) are never retried: if these exact
+    # bytes already failed that way — under this or any other path — record the
+    # same failure without opening the file again. Changed content gets a new try.
+    broken = await _known_broken(session, current_sha)
+    if broken is not None:
+        code, message = broken
+        await _publish_terminal(
+            ctx,
+            entry,
+            st,
+            current_sha,
+            status=ExtractionStatus.failed,
+            entry_state=CatalogEntryState.failed,
+            error_code=code,
+            error_message=message,
+        )
+        raise PermanentJobError(code, message)
 
     extractor = get_extractor(entry.extension, settings=get_settings())
     if extractor is None:
@@ -194,6 +213,24 @@ async def handle_index_file(ctx: JobContext) -> None:
         embedded=vectors is not None,
         artifact_reused=artifact.reused,
     )
+
+
+async def _known_broken(session: AsyncSession, sha256: str) -> tuple[str, str] | None:
+    """Error code + message of an earlier unrecoverable failure for these bytes."""
+    row = (
+        await session.execute(
+            select(FileVersion.error_code, FileVersion.error_message)
+            .where(
+                FileVersion.sha256 == sha256,
+                FileVersion.extraction_status == ExtractionStatus.failed.value,
+                FileVersion.error_code.in_(UNRECOVERABLE_CODES),
+            )
+            .limit(1)
+        )
+    ).first()
+    if row is None:
+        return None
+    return str(row[0]), row[1] or "file previously failed to extract"
 
 
 async def _already_indexed(
