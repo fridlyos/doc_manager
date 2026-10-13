@@ -321,6 +321,7 @@ button:disabled {
 a:focus-visible,
 button:focus-visible,
 input:focus-visible,
+textarea:focus-visible,
 select:focus-visible,
 [tabindex]:focus-visible {
   outline: 2px solid #7aa2f7;
@@ -912,6 +913,26 @@ button.danger:hover:not(:disabled) {
 }
 .chat-input {
   flex: 1 1 20rem;
+  min-height: 2.25rem;
+  max-height: 12rem;
+  padding: 0.45rem 0.6rem;
+  font: inherit;
+  line-height: 1.4;
+  color: var(--text);
+  background: var(--bg);
+  border: 1px solid #343a46;
+  border-radius: 0.375rem;
+  resize: none;
+  overflow-y: auto;
+}
+.chat-form {
+  align-items: flex-end;
+}
+.chat-hint {
+  flex-basis: 100%;
+  margin: 0;
+  font-size: 0.72rem;
+  color: var(--muted);
 }
 @media (prefers-reduced-motion: reduce) {
   .chat-transcript {

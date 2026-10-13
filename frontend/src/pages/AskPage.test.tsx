@@ -223,3 +223,29 @@ test("renders an ask.error", async () => {
   fireEvent.click(screen.getByRole("button", { name: "Send" }));
   expect(await screen.findByText(/did not finish in time/)).toBeInTheDocument();
 });
+
+test("Enter sends the message; Shift+Enter keeps a multiline draft", async () => {
+  const calls: RequestInit[] = [];
+  vi.spyOn(globalThis, "fetch").mockImplementation((url, init) => {
+    if (String(url).includes("/system/providers"))
+      return Promise.resolve(providersResponse() as Response);
+    calls.push(init as RequestInit);
+    return Promise.resolve(
+      streamResponse(sseFrames({ event: "ask.result", data: { data: RESULT } })) as Response,
+    );
+  });
+  renderPage();
+
+  await screen.findByRole("option", { name: "ollama" });
+  const input = screen.getByRole("textbox", { name: "Message" });
+  expect(input.tagName).toBe("TEXTAREA");
+  fireEvent.change(input, { target: { value: "line one\nline two" } });
+
+  fireEvent.keyDown(input, { key: "Enter", shiftKey: true });
+  expect(calls.length).toBe(0);
+
+  fireEvent.keyDown(input, { key: "Enter" });
+  await waitFor(() => expect(calls.length).toBe(1));
+  expect(JSON.parse(calls[0].body as string).question).toBe("line one\nline two");
+  expect(input).toHaveValue("");
+});

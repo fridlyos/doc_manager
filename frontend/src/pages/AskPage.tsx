@@ -1,4 +1,4 @@
-import { FormEvent, useEffect, useMemo, useRef, useState } from "react";
+import { FormEvent, KeyboardEvent, useEffect, useMemo, useRef, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import {
   AskCitation,
@@ -140,6 +140,18 @@ export function AskPage() {
 
   function submit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
+    send();
+  }
+
+  // Enter sends, Shift+Enter inserts a newline. Skip while an IME is composing
+  // so Enter can confirm a candidate instead of sending half a word.
+  function onMessageKeyDown(event: KeyboardEvent<HTMLTextAreaElement>) {
+    if (event.key !== "Enter" || event.shiftKey || event.nativeEvent.isComposing) return;
+    event.preventDefault();
+    send();
+  }
+
+  function send() {
     const q = question.trim();
     if (!q || streaming || !selected) return;
     const history = historyFromMessages(messages);
@@ -256,16 +268,22 @@ export function AskPage() {
       )}
 
       <form className="chat-form" onSubmit={submit}>
-        <input
+        <textarea
           className="chat-input"
+          rows={Math.min(8, Math.max(1, question.split("\n").length))}
           value={question}
           onChange={(e) => setQuestion(e.target.value)}
+          onKeyDown={onMessageKeyDown}
           placeholder="Send a message… e.g. When does the Acme agreement renew?"
           aria-label="Message"
+          aria-describedby="chat-input-hint"
         />
         <button type="submit" disabled={streaming || !selected || !question.trim()}>
           {streaming ? "Sending…" : "Send"}
         </button>
+        <p id="chat-input-hint" className="chat-hint">
+          Enter to send · Shift+Enter for a new line
+        </p>
       </form>
     </section>
   );
