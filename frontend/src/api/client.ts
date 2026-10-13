@@ -482,6 +482,29 @@ export async function createSyncPlan(
   return result.data;
 }
 
+// Re-run the comparison in place; 409 while the plan's build job is still open.
+export async function rebuildSyncPlan(id: string): Promise<SyncPlan> {
+  const result = await apiFetch<Resource<SyncPlan>>(`/api/v1/sync-plans/${id}/rebuild`, {
+    method: "POST",
+    headers: { "Idempotency-Key": idemKey() },
+  });
+  return result.data;
+}
+
+export async function deleteSyncPlan(id: string): Promise<void> {
+  const resp = await fetch(`${API_BASE_URL}/api/v1/sync-plans/${id}`, { method: "DELETE" });
+  if (!resp.ok) {
+    let detail = `request failed: ${resp.status}`;
+    try {
+      const problem = (await resp.json()) as { detail?: string };
+      if (problem.detail) detail = problem.detail;
+    } catch {
+      // Non-JSON failures keep the status fallback.
+    }
+    throw new Error(detail);
+  }
+}
+
 // --- Ask (RAG generation) ---------------------------------------------------
 
 export type DataBoundary = "local" | "external";

@@ -11,7 +11,7 @@ from __future__ import annotations
 
 import uuid
 
-from sqlalchemy import select
+from sqlalchemy import delete, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from doc_manager.core.display import display_path
@@ -46,6 +46,8 @@ async def handle_build_sync_plan(ctx: JobContext) -> None:
     target = await _snapshot(session, plan.target_location_id)
     result = compare_locations(source, target)
 
+    # A rebuild reuses the plan row; never stack a fresh comparison on old items.
+    await session.execute(delete(SyncPlanItem).where(SyncPlanItem.plan_id == plan.id))
     for item in result.items:
         session.add(
             SyncPlanItem(

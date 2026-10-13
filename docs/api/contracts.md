@@ -297,6 +297,7 @@ These job-creating POSTs require an `Idempotency-Key` header:
 - `/api/v1/documents/{id}/reindex`
 - `/api/v1/jobs/{id}/retry`
 - `/api/v1/sync-plans`
+- `/api/v1/sync-plans/{id}/rebuild`
 - any later POST documented as creating durable background work
 
 Rules:
@@ -383,7 +384,7 @@ Mutable configuration resources, beginning with source locations, use optimistic
 - `If-None-Match` on GET MAY return `304`.
 - `If-Match: *` is not accepted for protected mutations in v1.
 
-Job claims, retry/cancel transitions, scans, and sync-plan generation use atomic domain-state checks rather than client ETags. Generated sync plans are immutable in the MVP. Collection pagination does not imply a lock or snapshot.
+Job claims, retry/cancel transitions, scans, and sync-plan generation use atomic domain-state checks rather than client ETags. Generated sync plan items are never edited; `POST /sync-plans/{id}/rebuild` replaces them wholesale by re-running the comparison, and `DELETE /sync-plans/{id}` removes the plan and its items (no files are touched). Both return `409` while a `build_sync_plan` job for the plan is open. Collection pagination does not imply a lock or snapshot.
 
 ## 8. Provider-neutral Ask contract
 

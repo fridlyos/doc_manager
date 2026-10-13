@@ -125,3 +125,53 @@ test("compare posts source + target to create a plan", async () => {
     expect((call?.[1] as RequestInit).headers).toHaveProperty("Idempotency-Key");
   });
 });
+
+function routeWithPlan(calls: { url: string; init?: RequestInit }[]) {
+  return vi.spyOn(globalThis, "fetch").mockImplementation((url, init) => {
+    const href = String(url);
+    calls.push({ url: href, init });
+    if (href.includes("/locations")) return Promise.resolve(locations());
+    if (init?.method === "DELETE") return Promise.resolve({ ok: true, status: 204 } as Response);
+    if (init?.method === "POST") {
+      return Promise.resolve({
+        ok: true,
+        status: 202,
+        json: async () => ({ data: { ...PLAN, status: "building" } }),
+      } as Response);
+    }
+    return Promise.resolve(plans([PLAN]));
+  });
+}
+
+test("rebuild posts to the plan's rebuild endpoint with an idempotency key", async () => {
+  const calls: { url: string; init?: RequestInit }[] = [];
+  routeWithPlan(calls);
+  renderPage();
+
+  await screen.findByText("north → south");
+  fireEvent.click(screen.getByRole("button", { name: "Rebuild" }));
+
+  await waitFor(() => {
+    const call = calls.find((c) => c.url.endsWith("/sync-plans/p1/rebuild"));
+    expect(call?.init?.method).toBe("POST");
+    expect(call?.init?.headers).toHaveProperty("Idempotency-Key");
+  });
+});
+
+test("delete asks for confirmation before sending DELETE", async () => {
+  const calls: { url: string; init?: RequestInit }[] = [];
+  routeWithPlan(calls);
+  renderPage();
+
+  await screen.findByText("north → south");
+  fireEvent.click(screen.getByRole("button", { name: "Delete" }));
+  expect(await screen.findByText(/Only the plan is removed/)).toBeInTheDocument();
+  expect(calls.some((c) => c.init?.method === "DELETE")).toBe(false);
+
+  const dialogButtons = screen.getAllByRole("button", { name: "Delete" });
+  fireEvent.click(dialogButtons[dialogButtons.length - 1]);
+  await waitFor(() => {
+    const call = calls.find((c) => c.init?.method === "DELETE");
+    expect(call?.url).toMatch(/\/sync-plans\/p1$/);
+  });
+});

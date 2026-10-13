@@ -4,10 +4,13 @@ import {
   SyncPlan,
   SyncPlanItem,
   createSyncPlan,
+  deleteSyncPlan,
   fetchLocations,
   fetchSyncPlanItems,
   fetchSyncPlans,
+  rebuildSyncPlan,
 } from "../api/client";
+import { ConfirmDialog } from "../components/ConfirmDialog";
 
 const ACTION_LABELS: Record<string, string> = {
   already_present: "Already present",
@@ -128,11 +131,17 @@ function PlanRow({
   open: boolean;
   onToggle: () => void;
 }) {
+  const queryClient = useQueryClient();
+  const [confirmDelete, setConfirmDelete] = useState(false);
   const items = useQuery({
     queryKey: ["sync-plans", plan.id, "items"],
     queryFn: () => fetchSyncPlanItems(plan.id),
     enabled: open && plan.status === "ready",
   });
+  const refresh = () => queryClient.invalidateQueries({ queryKey: ["sync-plans"] });
+  const rebuild = useMutation({ mutationFn: () => rebuildSyncPlan(plan.id), onSuccess: refresh });
+  const remove = useMutation({ mutationFn: () => deleteSyncPlan(plan.id), onSuccess: refresh });
+  const actionError = rebuild.error ?? remove.error;
 
   return (
     <>
@@ -145,12 +154,29 @@ function PlanRow({
         </td>
         <td>{plan.covered_percent.toFixed(0)}%</td>
         <td>{plan.item_count}</td>
-        <td>
-          <button className="linklike" onClick={onToggle} disabled={plan.status !== "ready"}>
+        <td className="row-actions">
+          <button onClick={onToggle} disabled={plan.status !== "ready"}>
             {open ? "Hide" : "View"}
+          </button>
+          <button onClick={() => rebuild.mutate()} disabled={rebuild.isPending}>
+            {rebuild.isPending ? "Rebuilding…" : "Rebuild"}
+          </button>
+          <button
+            className="danger"
+            onClick={() => setConfirmDelete(true)}
+            disabled={remove.isPending}
+          >
+            Delete
           </button>
         </td>
       </tr>
+      {actionError && (
+        <tr className="detail-row">
+          <td colSpan={5}>
+            <p className="error">{actionError.message}</p>
+          </td>
+        </tr>
+      )}
       {open && plan.status === "ready" && (
         <tr className="detail-row">
           <td colSpan={5}>
@@ -173,6 +199,19 @@ function PlanRow({
             )}
           </td>
         </tr>
+      )}
+      {confirmDelete && (
+        <ConfirmDialog
+          title="Delete sync plan"
+          message={`Delete the ${sourceName} → ${targetName} plan? Only the plan is removed; no files are touched.`}
+          confirmLabel="Delete"
+          danger
+          onCancel={() => setConfirmDelete(false)}
+          onConfirm={() => {
+            setConfirmDelete(false);
+            remove.mutate();
+          }}
+        />
       )}
     </>
   );

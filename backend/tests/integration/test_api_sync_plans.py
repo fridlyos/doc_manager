@@ -175,3 +175,86 @@ def test_no_execution_endpoint_exists(client: TestClient, sync_engine: object) -
     # There is intentionally no execute/apply route in the MVP.
     assert client.post(f"/api/v1/sync-plans/{plan_id}/execute").status_code in (404, 405)
     assert client.post(f"/api/v1/sync-plans/{plan_id}/apply").status_code in (404, 405)
+
+
+def test_rebuild_clears_items_and_enqueues_a_build(client: TestClient, sync_engine: object) -> None:
+    source, target = _two_locations(sync_engine)
+    plan_id = _seed_ready_plan(sync_engine, source, target)
+
+    resp = client.post(f"/api/v1/sync-plans/{plan_id}/rebuild", headers={"Idempotency-Key": idem()})
+    assert resp.status_code == 202, resp.text
+    plan = resp.json()["data"]
+    assert plan["id"] == plan_id
+    assert plan["status"] == "building"
+    assert plan["item_count"] == 0
+    assert plan["summary"] is None
+    assert client.get(f"/api/v1/sync-plans/{plan_id}/items").json()["data"] == []
+    with Session(sync_engine) as s:  # type: ignore[arg-type]
+        jobs = (
+            s.execute(
+                text(
+                    "SELECT payload_json->>'plan_id' FROM ingestion_jobs"
+                    " WHERE job_type = 'build_sync_plan'"
+                )
+            )
+            .scalars()
+            .all()
+        )
+    assert jobs == [plan_id]
+
+
+def test_rebuild_and_delete_refuse_while_a_build_is_open(
+    client: TestClient, sync_engine: object
+) -> None:
+    source, target = _two_locations(sync_engine)
+    plan_id = _seed_ready_plan(sync_engine, source, target)
+    first = client.post(
+        f"/api/v1/sync-plans/{plan_id}/rebuild", headers={"Idempotency-Key": idem()}
+    )
+    assert first.status_code == 202
+
+    again = client.post(
+        f"/api/v1/sync-plans/{plan_id}/rebuild", headers={"Idempotency-Key": idem()}
+    )
+    assert again.status_code == 409
+    assert client.delete(f"/api/v1/sync-plans/{plan_id}").status_code == 409
+
+
+def test_rebuild_is_idempotent_per_key(client: TestClient, sync_engine: object) -> None:
+    source, target = _two_locations(sync_engine)
+    plan_id = _seed_ready_plan(sync_engine, source, target)
+    key = idem()
+    client.post(f"/api/v1/sync-plans/{plan_id}/rebuild", headers={"Idempotency-Key": key})
+    replay = client.post(f"/api/v1/sync-plans/{plan_id}/rebuild", headers={"Idempotency-Key": key})
+    assert replay.status_code == 202
+    assert replay.json()["meta"]["idempotency_replayed"] is True
+
+
+def test_rebuild_requires_idempotency_key(client: TestClient, sync_engine: object) -> None:
+    source, target = _two_locations(sync_engine)
+    plan_id = _seed_ready_plan(sync_engine, source, target)
+    assert client.post(f"/api/v1/sync-plans/{plan_id}/rebuild").status_code == 400
+
+
+def test_delete_removes_plan_and_items(client: TestClient, sync_engine: object) -> None:
+    source, target = _two_locations(sync_engine)
+    plan_id = _seed_ready_plan(sync_engine, source, target)
+
+    assert client.delete(f"/api/v1/sync-plans/{plan_id}").status_code == 204
+    assert client.get(f"/api/v1/sync-plans/{plan_id}").status_code == 404
+    with Session(sync_engine) as s:  # type: ignore[arg-type]
+        remaining = s.execute(text("SELECT count(*) FROM sync_plan_items")).scalar_one()
+    assert remaining == 0
+    with Session(sync_engine) as s:  # type: ignore[arg-type]
+        assert s.execute(text("SELECT count(*) FROM source_locations")).scalar_one() == 2
+
+
+def test_rebuild_and_delete_unknown_plan_are_404(client: TestClient) -> None:
+    missing = uuid.uuid4()
+    assert (
+        client.post(
+            f"/api/v1/sync-plans/{missing}/rebuild", headers={"Idempotency-Key": idem()}
+        ).status_code
+        == 404
+    )
+    assert client.delete(f"/api/v1/sync-plans/{missing}").status_code == 404

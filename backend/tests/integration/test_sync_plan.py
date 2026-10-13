@@ -214,6 +214,16 @@ async def test_plan_over_empty_target_is_all_copy(
     await _scan_and_index(engine, db_engine, session_factory, target)
 
     plan_id = await _build_plan(engine, db_engine, session_factory, source, target)
+    # Re-running the build for the same plan (a rebuild) replaces, not stacks, items.
+    async with session_factory() as session:
+        await engine.enqueue(
+            session,
+            job_type=JobType.build_sync_plan,
+            payload={"version": 1, "plan_id": str(plan_id)},
+            origin=JobOrigin.api,
+        )
+        await session.commit()
+    assert await _run_one(engine, db_engine) == JobType.build_sync_plan.value
     async with session_factory() as session:
         plan = await session.get(SyncPlan, plan_id)
         assert plan is not None

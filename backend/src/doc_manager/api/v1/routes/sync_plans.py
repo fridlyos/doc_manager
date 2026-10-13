@@ -4,6 +4,10 @@
 location against a target and enqueues ``build_sync_plan`` to fill it. There is
 intentionally **no execution endpoint** — the MVP compares and plans only. Paths
 are server-resolved display / relative paths; no route reads a filesystem path.
+
+A plan can be rebuilt in place (``POST /sync-plans/{id}/rebuild``: items cleared,
+re-compared against the current catalog) or deleted (``DELETE``). Both refuse with
+409 while a build job for the plan is still open.
 """
 
 from __future__ import annotations
@@ -14,7 +18,7 @@ from typing import Annotated, Any
 
 from fastapi import APIRouter, Depends, Request, Response
 from pydantic import BaseModel, ConfigDict
-from sqlalchemy import select
+from sqlalchemy import delete, func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from doc_manager.api.dependencies import (
@@ -35,8 +39,8 @@ from doc_manager.api.pagination import (
 )
 from doc_manager.api.serializers import serialize_sync_plan, serialize_sync_plan_item
 from doc_manager.core.config import Settings
-from doc_manager.db.models import SourceLocation, SyncPlan, SyncPlanItem
-from doc_manager.domain.enums import JobOrigin, JobType, SyncPlanStatus
+from doc_manager.db.models import IngestionJob, SourceLocation, SyncPlan, SyncPlanItem
+from doc_manager.domain.enums import OPEN_STATUSES, JobOrigin, JobType, SyncPlanStatus
 from doc_manager.jobs.queue import JobEngine
 
 router = APIRouter(prefix="/sync-plans", tags=["sync-plans"])
@@ -60,6 +64,38 @@ async def _load_location(session: AsyncSession, location_id: uuid.UUID) -> Sourc
     return location
 
 
+async def _load_plan(session: AsyncSession, plan_id: str) -> SyncPlan:
+    plan = await session.get(SyncPlan, parse_uuid(plan_id, what="sync plan"))
+    if plan is None:
+        raise Problem(404, "not_found", "No such sync plan.")
+    return plan
+
+
+async def _require_no_open_build(session: AsyncSession, plan: SyncPlan) -> None:
+    open_jobs = await session.scalar(
+        select(func.count())
+        .select_from(IngestionJob)
+        .where(
+            IngestionJob.job_type == JobType.build_sync_plan.value,
+            IngestionJob.status.in_([s.value for s in OPEN_STATUSES]),
+            IngestionJob.payload_json["plan_id"].astext == str(plan.id),
+        )
+    )
+    if open_jobs:
+        raise Problem(
+            409,
+            "conflict",
+            "This sync plan is still building; wait for it or cancel its job first.",
+        )
+
+
+def _engine(settings: Settings) -> JobEngine:
+    return JobEngine(
+        base_delay_seconds=settings.job_retry_base_delay_seconds,
+        max_delay_seconds=settings.job_retry_max_delay_seconds,
+    )
+
+
 @router.post("", status_code=202)
 async def create_sync_plan(
     request: Request,
@@ -74,10 +110,7 @@ async def create_sync_plan(
     await _load_location(session, body.source_location_id)
     await _load_location(session, body.target_location_id)
 
-    engine = JobEngine(
-        base_delay_seconds=settings.job_retry_base_delay_seconds,
-        max_delay_seconds=settings.job_retry_max_delay_seconds,
-    )
+    engine = _engine(settings)
     fingerprint = request_fingerprint(
         {"source": str(body.source_location_id), "target": str(body.target_location_id)}, None
     )
@@ -173,10 +206,72 @@ async def get_sync_plan(
     plan_id: str,
     session: Annotated[AsyncSession, Depends(get_session)],
 ) -> dict[str, Any]:
-    plan = await session.get(SyncPlan, parse_uuid(plan_id, what="sync plan"))
-    if plan is None:
-        raise Problem(404, "not_found", "No such sync plan.")
+    plan = await _load_plan(session, plan_id)
     return envelope(request, serialize_sync_plan(plan))
+
+
+@router.post("/{plan_id}/rebuild", status_code=202)
+async def rebuild_sync_plan(
+    request: Request,
+    response: Response,
+    plan_id: str,
+    session: Annotated[AsyncSession, Depends(get_session)],
+    settings: Annotated[Settings, Depends(get_settings_dep)],
+    idempotency_key: Annotated[str, Depends(require_idempotency_key)],
+) -> dict[str, Any]:
+    """Re-run the comparison against the current catalog, replacing the items.
+
+    Also the way out for a plan stuck in ``building`` after its job failed.
+    """
+    plan = await _load_plan(session, plan_id)
+    outcome = await reserve_idempotency(
+        session,
+        method="POST",
+        route_template="/api/v1/sync-plans/{plan_id}/rebuild",
+        key=idempotency_key,
+        fingerprint=request_fingerprint({"plan_id": str(plan.id)}, None),
+    )
+    replayed = outcome.replayed_job is not None
+    if not replayed:
+        await _require_no_open_build(session, plan)
+        await session.execute(delete(SyncPlanItem).where(SyncPlanItem.plan_id == plan.id))
+        plan.status = SyncPlanStatus.building.value
+        plan.item_count = 0
+        plan.covered_percent = 0.0
+        plan.summary_json = None
+        plan.error_code = None
+        plan.built_at = None
+        job, _ = await _engine(settings).enqueue(
+            session,
+            job_type=JobType.build_sync_plan,
+            payload={"version": 1, "plan_id": str(plan.id)},
+            origin=JobOrigin.api,
+            max_attempts=settings.job_max_attempts,
+            request_key=idempotency_key,
+            actor="api",
+        )
+        assert outcome.record is not None
+        outcome.record.job_id = job.id
+    await session.commit()
+    await session.refresh(plan)
+    response.headers["Location"] = f"/api/v1/sync-plans/{plan.id}"
+    response.headers["Retry-After"] = "2"
+    if replayed:
+        response.headers["Idempotency-Replayed"] = "true"
+    return envelope(request, serialize_sync_plan(plan), idempotency_replayed=replayed)
+
+
+@router.delete("/{plan_id}", status_code=204)
+async def delete_sync_plan(
+    plan_id: str,
+    session: Annotated[AsyncSession, Depends(get_session)],
+) -> Response:
+    """Remove a plan and its items (FK cascade). Source files are never touched."""
+    plan = await _load_plan(session, plan_id)
+    await _require_no_open_build(session, plan)
+    await session.delete(plan)
+    await session.commit()
+    return Response(status_code=204)
 
 
 @router.get("/{plan_id}/items")
