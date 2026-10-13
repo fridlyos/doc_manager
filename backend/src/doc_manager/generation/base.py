@@ -57,6 +57,9 @@ class ChatTurn:
 
     role: str
     content: str
+    #: Chunks an assistant turn cited. Retrieval-only (keeps a follow-up on the
+    #: same documents); never sent to the provider.
+    cited_chunk_ids: tuple[str, ...] = ()
 
 
 @dataclass(frozen=True, slots=True)

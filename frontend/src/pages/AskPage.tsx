@@ -89,7 +89,14 @@ export function AskPage() {
     return msgs
       .filter((m) => m.content.trim().length > 0)
       .slice(-MAX_HISTORY_TURNS)
-      .map((m) => ({ role: m.role, content: m.content }));
+      .map((m) => {
+        // Cited chunks let the backend keep a follow-up ("anything about X
+        // there?") on the documents this answer used. Not shown to the model.
+        const cited = m.citations?.map((c) => c.chunk_id) ?? [];
+        return cited.length > 0
+          ? { role: m.role, content: m.content, cited_chunk_ids: cited }
+          : { role: m.role, content: m.content };
+      });
   }
 
   async function run(q: string, history: AskHistoryTurn[], acknowledged: boolean) {

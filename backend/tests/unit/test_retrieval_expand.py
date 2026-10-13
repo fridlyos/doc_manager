@@ -39,3 +39,14 @@ def test_no_duplicate_terms() -> None:
     # "work" and "job" both expand to "employment"/"experience"; no repeats.
     expanded = expand_keyword_query("job work experience").split()
     assert len(expanded) == len(set(expanded))
+
+
+def test_drops_stopwords() -> None:
+    # The keyword leg matches chunks with *any* term, so filler words would match
+    # nearly every chunk and wash out the boost for the words that matter.
+    expanded = expand_keyword_query("is there anything about renters insurance there").split()
+    assert expanded == ["renters", "insurance"]
+
+
+def test_all_stopword_query_is_empty() -> None:
+    assert expand_keyword_query("what is it about") == ""

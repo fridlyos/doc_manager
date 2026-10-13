@@ -249,3 +249,32 @@ test("Enter sends the message; Shift+Enter keeps a multiline draft", async () =>
   expect(JSON.parse(calls[0].body as string).question).toBe("line one\nline two");
   expect(input).toHaveValue("");
 });
+
+test("sends the previous answer's cited chunks with history so follow-ups stay on those documents", async () => {
+  const calls: RequestInit[] = [];
+  vi.spyOn(globalThis, "fetch").mockImplementation((url, init) => {
+    if (String(url).includes("/system/providers"))
+      return Promise.resolve(providersResponse() as Response);
+    calls.push(init as RequestInit);
+    return Promise.resolve(
+      streamResponse(sseFrames({ event: "ask.result", data: { data: RESULT } })) as Response,
+    );
+  });
+  renderPage();
+
+  await screen.findByRole("option", { name: "ollama" });
+  const input = screen.getByRole("textbox", { name: "Message" });
+  fireEvent.change(input, { target: { value: "what's my lease for 2615" } });
+  fireEvent.keyDown(input, { key: "Enter" });
+  await screen.findByText(/It renews in December/);
+
+  fireEvent.change(input, { target: { value: "anything about insurance there?" } });
+  fireEvent.keyDown(input, { key: "Enter" });
+  await waitFor(() => expect(calls.length).toBe(2));
+
+  const history = JSON.parse(calls[1].body as string).history;
+  expect(history).toEqual([
+    { role: "user", content: "what's my lease for 2615" },
+    { role: "assistant", content: expect.any(String), cited_chunk_ids: ["c1"] },
+  ]);
+});

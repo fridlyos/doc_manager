@@ -15,7 +15,7 @@ generation, emitting exactly one terminal outcome.
 from __future__ import annotations
 
 import uuid
-from collections.abc import AsyncIterator
+from collections.abc import AsyncIterator, Awaitable, Callable, Sequence
 from dataclasses import dataclass, field
 from time import perf_counter
 
@@ -49,10 +49,24 @@ from doc_manager.generation.rag import (
     select_evidence,
 )
 from doc_manager.generation.timeout import stream_with_timeout
-from doc_manager.retrieval.service import RetrievalService, SearchFilters
+from doc_manager.retrieval.service import RetrievalService, SearchFilters, SearchResult
 
 _CONTEXT_BUFFER_TOKENS = 512
 _MIN_EVIDENCE_BUDGET = 256
+#: Recent user questions used to recover which documents a chat is about.
+_CONTEXT_QUESTIONS = 3
+
+
+def _interleave(first: list[SearchResult], second: list[SearchResult]) -> list[SearchResult]:
+    """Alternate two ranked lists (``first`` leads), dropping repeated chunks."""
+    merged: list[SearchResult] = []
+    seen: set[str] = set()
+    for i in range(max(len(first), len(second))):
+        for ranked in (first, second):
+            if i < len(ranked) and ranked[i].chunk_id not in seen:
+                seen.add(ranked[i].chunk_id)
+                merged.append(ranked[i])
+    return merged
 
 
 @dataclass(frozen=True, slots=True)
@@ -256,21 +270,8 @@ class AskService:
         budget = _evidence_budget(provider, settings, max_output)
 
         retrieval_start = perf_counter()
-        results = await self._retrieval.search(
-            session,
-            query=request.question,
-            filters=request.filters,
-            top_k=request.top_k or settings.search_top_k,
-            score_threshold=request.score_threshold
-            if request.score_threshold is not None
-            else settings.search_score_threshold,
-        )
-        evidence = select_evidence(
-            results,
-            token_budget=budget,
-            max_per_content=settings.ask_max_chunks_per_content,
-            max_blocks=settings.ask_max_evidence_blocks,
-        )
+        results = await self._retrieve(session, request, budget)
+        evidence = self._select(results, budget)
         retrieval_ms = _ms(retrieval_start)
         model_id = request.model_id or _configured_model(provider, settings)
 
@@ -307,6 +308,75 @@ class AskService:
             if outcome.decision is ExternalDecision.confirmation_required:
                 prep.early = self._confirmation(request, provider, model_id, prep)
         return prep
+
+    def _select(self, results: list[SearchResult], budget: int) -> EvidenceSet:
+        return select_evidence(
+            results,
+            token_budget=budget,
+            max_per_content=self._settings.ask_max_chunks_per_content,
+            max_blocks=self._settings.ask_max_evidence_blocks,
+        )
+
+    async def _retrieve(
+        self, session: AsyncSession, request: AskRequest, budget: int
+    ) -> list[SearchResult]:
+        """Search for the question; on a follow-up, also search the documents the
+        conversation is about.
+
+        A follow-up such as "is there anything about insurance there" carries no
+        terms naming the document it means, so searching it alone drifts to
+        whatever else matches. The documents in focus are the ones the latest
+        answer cited; failing that (e.g. the last turn found nothing), re-run
+        retrieval for the recent user questions to recover them. Hits from those
+        documents are interleaved first with the open search, so a change of
+        topic still works.
+        """
+        settings = self._settings
+
+        async def search(query: str, scope: Sequence[str] | None = None) -> list[SearchResult]:
+            return await self._retrieval.search(
+                session,
+                query=query,
+                filters=request.filters,
+                top_k=request.top_k or settings.search_top_k,
+                score_threshold=request.score_threshold
+                if request.score_threshold is not None
+                else settings.search_score_threshold,
+                content_object_ids=scope,
+            )
+
+        results = await search(request.question)
+        if not request.history:
+            return results
+        focus = await self._focus_documents(session, request.history, budget, search)
+        if not focus:
+            return results
+        return _interleave(await search(request.question, focus), results)
+
+    async def _focus_documents(
+        self,
+        session: AsyncSession,
+        history: Sequence[ChatTurn],
+        budget: int,
+        search: Callable[[str], Awaitable[list[SearchResult]]],
+    ) -> list[str]:
+        cited = next(
+            (
+                t.cited_chunk_ids
+                for t in reversed(history)
+                if t.role == "assistant" and t.cited_chunk_ids
+            ),
+            (),
+        )
+        if cited:
+            focus = await self._retrieval.content_ids_for_chunks(session, cited)
+            if focus:
+                return focus
+        prior = [t.content for t in history if t.role == "user"][-_CONTEXT_QUESTIONS:]
+        if not prior:
+            return []
+        earlier = self._select(await search(" ".join(prior)), budget)
+        return list(dict.fromkeys(b.content_object_id for b in earlier.blocks))
 
     async def _generate(
         self, request: AskRequest, provider: GenerationProvider, prep: _Prepared

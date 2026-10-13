@@ -233,3 +233,22 @@ def test_provider_test_probe(client: TestClient) -> None:
 
     missing = client.post("/api/v1/system/providers/nope/test")
     assert missing.status_code == 404
+
+
+def test_history_cited_chunk_ids_reach_the_ask_request() -> None:
+    from doc_manager.api.v1.routes.ask import AskBody, _ask_request
+
+    chunk = "6f1c0d1e-2b3a-4c5d-8e9f-0a1b2c3d4e5f"
+    body = AskBody.model_validate(
+        {
+            "question": "anything about insurance there?",
+            "provider_id": "ollama",
+            "history": [
+                {"role": "user", "content": "my lease for 2615"},
+                {"role": "assistant", "content": "Found it [1].", "cited_chunk_ids": [chunk]},
+            ],
+        }
+    )
+    history = _ask_request(body).history
+    assert history[0].cited_chunk_ids == ()
+    assert history[1].cited_chunk_ids == (chunk,)

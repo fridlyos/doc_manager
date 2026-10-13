@@ -55,6 +55,7 @@ _MAX_TOP_K = 100
 # recent turns and the server caps it as defence in depth.
 _MAX_HISTORY_TURNS = 20
 _MAX_HISTORY_CHARS = 8000
+_MAX_CITED_CHUNKS = 50
 
 
 class AskHistoryTurn(BaseModel):
@@ -62,6 +63,8 @@ class AskHistoryTurn(BaseModel):
 
     role: Literal["user", "assistant"]
     content: str = Field(min_length=1, max_length=_MAX_HISTORY_CHARS)
+    #: Chunk ids an assistant turn cited, so a follow-up stays on those documents.
+    cited_chunk_ids: list[uuid.UUID] = Field(default_factory=list, max_length=_MAX_CITED_CHUNKS)
 
 
 class AskFiltersBody(BaseModel):
@@ -110,7 +113,14 @@ def _ask_request(body: AskBody) -> AskRequest:
         top_k=retrieval.top_k,
         score_threshold=retrieval.score_threshold,
         model_id=body.model_id,
-        history=tuple(ChatTurn(role=t.role, content=t.content) for t in body.history),
+        history=tuple(
+            ChatTurn(
+                role=t.role,
+                content=t.content,
+                cited_chunk_ids=tuple(str(c) for c in t.cited_chunk_ids),
+            )
+            for t in body.history
+        ),
     )
 
 

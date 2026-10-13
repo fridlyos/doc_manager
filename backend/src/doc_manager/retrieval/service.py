@@ -21,7 +21,7 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from doc_manager.core.display import display_path
-from doc_manager.db.models import CatalogEntry, FileVersion, SourceLocation
+from doc_manager.db.models import CatalogEntry, Chunk, FileVersion, SourceLocation
 from doc_manager.domain.enums import CatalogEntryState
 from doc_manager.vectors import QdrantRepository
 
@@ -47,19 +47,103 @@ _KEYWORD_SYNONYMS: dict[str, tuple[str, ...]] = {
     "phone": ("mobile", "cell", "telephone"),
     "address": ("street", "city"),
 }
+#: Filler words dropped from the keyword leg. That leg matches chunks containing
+#: *any* term, so words like "there"/"about" would match nearly every chunk and
+#: wash out the boost for the words that carry the question. Question words and
+#: pronouns only; nothing that could name a document's subject.
+_KEYWORD_STOPWORDS = frozenset(
+    [
+        "a",
+        "about",
+        "all",
+        "am",
+        "an",
+        "and",
+        "any",
+        "anything",
+        "are",
+        "as",
+        "at",
+        "be",
+        "been",
+        "but",
+        "by",
+        "can",
+        "could",
+        "did",
+        "do",
+        "does",
+        "for",
+        "from",
+        "had",
+        "has",
+        "have",
+        "he",
+        "her",
+        "here",
+        "him",
+        "his",
+        "how",
+        "if",
+        "in",
+        "into",
+        "is",
+        "it",
+        "its",
+        "me",
+        "my",
+        "of",
+        "on",
+        "or",
+        "our",
+        "she",
+        "so",
+        "some",
+        "something",
+        "that",
+        "the",
+        "their",
+        "them",
+        "then",
+        "there",
+        "these",
+        "they",
+        "this",
+        "those",
+        "to",
+        "too",
+        "us",
+        "was",
+        "we",
+        "were",
+        "what",
+        "when",
+        "where",
+        "which",
+        "who",
+        "whom",
+        "why",
+        "will",
+        "with",
+        "would",
+        "you",
+        "your",
+    ]
+)
 _POSSESSIVE_RE = re.compile(r"['’]s\b", re.UNICODE)
 _WORD_RE = re.compile(r"[^\W_]{2,}", re.UNICODE)
 
 
 def expand_keyword_query(query: str) -> str:
-    """Query string for the keyword (hybrid) leg: possessives stripped, synonyms added.
+    """Query string for the keyword (hybrid) leg: possessives and stopwords stripped,
+    synonyms added.
 
     Returns a space-joined term list; the repository re-tokenises it. The vector
     leg keeps using the untouched question, so synonyms only ever *widen* which
     chunks the keyword leg can match — they never move the semantic anchor.
     """
     base = _POSSESSIVE_RE.sub("", query.lower())
-    terms = _WORD_RE.findall(base)
+    terms = [t for t in _WORD_RE.findall(base) if t not in _KEYWORD_STOPWORDS]
     expanded = list(terms)
     for term in terms:
         for synonym in _KEYWORD_SYNONYMS.get(term, ()):
@@ -119,13 +203,25 @@ class RetrievalService:
         filters: SearchFilters | None = None,
         top_k: int,
         score_threshold: float | None = None,
+        content_object_ids: Sequence[str] | None = None,
     ) -> list[SearchResult]:
+        """Ranked chunks for ``query``.
+
+        ``content_object_ids`` narrows the search to those documents (on top of
+        ``filters``); chat uses it to keep a follow-up within the documents the
+        conversation was already about.
+        """
         filters = filters or SearchFilters()
-        allowed: list[uuid.UUID] | None = None
+        allowed: list[uuid.UUID | str] | None = None
         if not filters.is_empty():
-            allowed = await self._allowed_content_ids(session, filters)
-            if not allowed:
-                return []  # filters exclude everything; no vector query needed.
+            allowed = list(await self._allowed_content_ids(session, filters))
+        if content_object_ids is not None:
+            scope = {str(c) for c in content_object_ids}
+            allowed = (
+                [c for c in allowed if str(c) in scope] if allowed is not None else list(scope)
+            )
+        if allowed is not None and not allowed:
+            return []  # filters exclude everything; no vector query needed.
 
         query_vector = self._embedding.embed_query(query)
         hits = await self._repo.search(
@@ -160,6 +256,23 @@ class RetrievalService:
                 )
             )
         return results
+
+    async def content_ids_for_chunks(
+        self, session: AsyncSession, chunk_ids: Sequence[str]
+    ) -> list[str]:
+        """Documents (content objects) the given chunks belong to, deduplicated."""
+        ids: list[uuid.UUID] = []
+        for raw in chunk_ids:
+            try:
+                ids.append(uuid.UUID(str(raw)))
+            except ValueError:
+                continue
+        if not ids:
+            return []
+        rows = await session.scalars(
+            select(Chunk.content_object_id).where(Chunk.id.in_(ids)).distinct()
+        )
+        return [str(r) for r in rows.all()]
 
     async def _allowed_content_ids(
         self, session: AsyncSession, filters: SearchFilters

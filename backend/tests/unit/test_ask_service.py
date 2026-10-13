@@ -201,3 +201,103 @@ async def test_external_allowed_reports_transfer_no_metadata() -> None:
     payload = result.data_boundary.external_payload
     assert payload.evidence_blocks_sent == 1
     assert payload.paths_sent == 0 and payload.file_names_sent == 0
+
+
+# --- Follow-up retrieval keeps the conversation's documents in scope ---------
+
+
+def _doc_hit(chunk: str, content: str, text: str, score: float) -> SearchResult:
+    from dataclasses import replace
+
+    return replace(_result(text, chunk=chunk), content_object_id=content, score=score)
+
+
+class ScriptedRetrieval:
+    """Answers by query text; records every call's query + document scope."""
+
+    def __init__(self, chunk_docs: dict[str, str] | None = None) -> None:
+        self.calls: list[tuple[str, tuple[str, ...] | None]] = []
+        self._chunk_docs = chunk_docs or {}
+
+    async def content_ids_for_chunks(self, session: Any, chunk_ids: Sequence[str]) -> list[str]:
+        return [self._chunk_docs[c] for c in chunk_ids if c in self._chunk_docs]
+
+    async def search(self, session: Any, **kwargs: Any) -> list[SearchResult]:
+        query: str = kwargs["query"]
+        scope = kwargs.get("content_object_ids")
+        self.calls.append((query, tuple(scope) if scope is not None else None))
+        if scope is not None:
+            # Within the lease, the insurance clause is the best match.
+            return [_doc_hit("lease-ins", "lease", "Tenant must carry renters insurance.", 0.6)]
+        if "2615" in query:
+            return [_doc_hit("lease-1", "lease", "Lease for 2615 Main St, unit 4.", 0.8)]
+        # Unscoped, the follow-up alone matches unrelated insurance policies.
+        return [
+            _doc_hit(f"pol-{i}", f"policy-{i}", f"Homeowner policy {i} coverage.", 0.7)
+            for i in range(8)
+        ]
+
+
+class CapturingProvider(FakeProvider):
+    def __init__(self) -> None:
+        super().__init__(DataBoundary.local, _answer_events("Yes [E1]."))
+        self.request: Any = None
+
+    async def generate(self, request: Any) -> AsyncIterator[GenerationEvent]:
+        self.request = request
+        async for event in super().generate(request):
+            yield event
+
+
+async def test_follow_up_searches_within_previous_turn_documents() -> None:
+    from doc_manager.generation.base import ChatTurn
+
+    retrieval = ScriptedRetrieval()
+    service = AskService(retrieval, Settings())  # type: ignore[arg-type]
+    provider = CapturingProvider()
+    request = AskRequest(
+        question="is there anything about renters insurance there",
+        provider_id="p",
+        history=(
+            ChatTurn("user", "what's my rental agreement for 2615"),
+            ChatTurn("assistant", "Your lease for 2615 Main St [1]."),
+        ),
+    )
+    result = await service.ask(object(), request, provider)  # type: ignore[arg-type]
+
+    assert result.status == "completed"
+    assert "Tenant must carry renters insurance." in provider.request.system_prompt
+    scoped = [scope for _, scope in retrieval.calls if scope is not None]
+    assert scoped == [("lease",)]
+
+
+async def test_first_question_does_a_single_unscoped_search() -> None:
+    retrieval = ScriptedRetrieval()
+    service = AskService(retrieval, Settings())  # type: ignore[arg-type]
+    provider = CapturingProvider()
+    request = AskRequest(question="what's my rental agreement for 2615", provider_id="p")
+    await service.ask(object(), request, provider)  # type: ignore[arg-type]
+    assert retrieval.calls == [("what's my rental agreement for 2615", None)]
+
+
+async def test_follow_up_is_scoped_to_documents_the_last_answer_cited() -> None:
+    from doc_manager.generation.base import ChatTurn
+
+    # The prior question alone would retrieve the lease, but the answer cited a
+    # different document; the cited one is what "there" refers to.
+    retrieval = ScriptedRetrieval(chunk_docs={"cited-chunk": "cited-doc"})
+    service = AskService(retrieval, Settings())  # type: ignore[arg-type]
+    request = AskRequest(
+        question="is there anything about renters insurance there",
+        provider_id="p",
+        history=(
+            ChatTurn("user", "what's my rental agreement for 2615"),
+            ChatTurn("assistant", "Found it [1].", cited_chunk_ids=("cited-chunk",)),
+        ),
+    )
+    await service.ask(object(), request, CapturingProvider())  # type: ignore[arg-type]
+
+    scoped = [scope for _, scope in retrieval.calls if scope is not None]
+    assert scoped == [("cited-doc",)]
+    # No need to re-run the earlier question when citations say which documents.
+    assert all("2615" not in query for query, _ in retrieval.calls)

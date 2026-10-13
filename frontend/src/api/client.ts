@@ -541,6 +541,8 @@ export interface AskResultData {
 export interface AskHistoryTurn {
   role: "user" | "assistant";
   content: string;
+  /** Chunks an assistant turn cited; keeps follow-ups on the same documents. */
+  cited_chunk_ids?: string[];
 }
 
 export interface AskRequestBody {
