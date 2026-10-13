@@ -59,38 +59,72 @@ body {
   color: var(--text);
 }
 
+/* Two-level hierarchy: each group is a separated section with an accented
+   heading; its links hang off a vertical guide line, and the active link
+   overrides that line with an accent bar. */
 .nav-group {
-  margin-top: 1rem;
+  padding: 0.75rem 0 0.25rem;
+}
+.nav-group + .nav-group {
+  border-top: 1px solid #22262e;
+  margin-top: 0.5rem;
 }
 .nav-group h2 {
-  font-size: 0.68rem;
+  display: flex;
+  align-items: center;
+  gap: 0.45rem;
+  font-size: 0.7rem;
   text-transform: uppercase;
-  letter-spacing: 0.06em;
-  color: var(--muted);
-  margin: 0 0 0.3rem 0.5rem;
-  font-weight: 600;
+  letter-spacing: 0.08em;
+  color: #c3c9d2;
+  margin: 0 0 0.4rem 0.35rem;
+  font-weight: 700;
+}
+.nav-group h2::before {
+  content: "";
+  width: 0.4rem;
+  height: 0.4rem;
+  border-radius: 2px;
+  background: #7aa2f7;
+  opacity: 0.8;
 }
 .nav-group ul {
   list-style: none;
-  margin: 0;
-  padding: 0;
+  margin: 0 0 0 0.5rem;
+  padding: 0 0 0 0.5rem;
+  border-left: 1px solid #2b3038;
 }
 .sidebar nav a {
+  position: relative;
   display: block;
-  padding: 0.4rem 0.6rem;
-  border-radius: 0.4rem;
+  padding: 0.32rem 0.6rem;
+  margin: 1px 0;
+  border-radius: 0.35rem;
   color: var(--muted);
   text-decoration: none;
-  font-size: 0.92rem;
+  font-size: 0.88rem;
+  transition:
+    background-color 0.15s ease,
+    color 0.15s ease;
 }
 .sidebar nav a:hover {
-  background: var(--bg);
+  background: #1f2430;
   color: var(--text);
 }
 .sidebar nav a.active {
-  background: var(--bg);
+  background: #222a3b;
   color: var(--text);
   font-weight: 600;
+}
+.sidebar nav a.active::before {
+  content: "";
+  position: absolute;
+  left: calc(-0.5rem - 1px);
+  top: 0.3rem;
+  bottom: 0.3rem;
+  width: 2px;
+  border-radius: 2px;
+  background: #7aa2f7;
 }
 
 .app-badge {
@@ -124,8 +158,11 @@ body {
     flex-wrap: wrap;
     gap: 0.75rem;
   }
-  .nav-group {
-    margin-top: 0.5rem;
+  .nav-group,
+  .nav-group + .nav-group {
+    border-top: none;
+    margin-top: 0;
+    padding-top: 0.5rem;
   }
   .app-main {
     padding: 1rem;
