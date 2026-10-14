@@ -41,13 +41,23 @@ def get_retrieval_service(request: Request) -> Any:
         return existing
     # Imported here to keep the heavy embedding/vector stack out of import time.
     from doc_manager.embedding import build_embedding_service
-    from doc_manager.retrieval import RetrievalService
-    from doc_manager.vectors import build_qdrant_repository
+    from doc_manager.retrieval import NameMatchConfig, RetrievalService
+    from doc_manager.vectors import build_name_index, build_qdrant_repository
 
     settings: Settings = request.app.state.settings
     embedding = build_embedding_service(settings)
     repo = build_qdrant_repository(settings, embedding.profile)
-    service = RetrievalService(embedding, repo)
+    service = RetrievalService(
+        embedding,
+        repo,
+        names=build_name_index(settings, embedding.profile),
+        name_match=NameMatchConfig(
+            min_score=settings.name_match_min_score,
+            margin=settings.name_match_margin,
+            max_files=settings.name_match_max_files,
+            chunks_per_file=settings.name_match_chunks_per_file,
+        ),
+    )
     request.app.state.retrieval_service = service
     return service
 

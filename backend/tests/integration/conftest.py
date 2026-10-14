@@ -156,17 +156,45 @@ class VectorEnv:
         collection = self.embedding.profile.collection_name(settings.qdrant_collection)  # type: ignore[attr-defined]
         return QdrantRepository(self.client, collection=collection)
 
+    def names(self, settings: object) -> object:
+        from doc_manager.vectors import NameIndex
+
+        collection = self.embedding.profile.collection_name(settings.qdrant_names_collection)  # type: ignore[attr-defined]
+        return NameIndex(self.client, collection=collection)
+
+
+@pytest.fixture(autouse=True)
+def offline_vectors(monkeypatch: pytest.MonkeyPatch) -> VectorEnv:
+    """Every integration test gets an in-memory Qdrant + fake embedder for the
+    file-name index, which index_file and the post-scan name sync always touch.
+    ``vector_env`` extends the same fakes to the chunk collection.
+    """
+    from qdrant_client import AsyncQdrantClient
+
+    env = VectorEnv(client=AsyncQdrantClient(location=":memory:"), embedding=FakeEmbeddingService())
+    monkeypatch.setattr(
+        "doc_manager.jobs.handlers.index_file.build_name_index",
+        lambda settings, profile: env.names(settings),
+    )
+    monkeypatch.setattr(
+        "doc_manager.jobs.handlers.name_index.build_name_index",
+        lambda settings, profile: env.names(settings),
+    )
+    monkeypatch.setattr(
+        "doc_manager.jobs.handlers.name_index.build_embedding_service",
+        lambda settings: env.embedding,
+    )
+    return env
+
 
 @pytest.fixture
-def vector_env(monkeypatch: pytest.MonkeyPatch) -> VectorEnv:
+def vector_env(monkeypatch: pytest.MonkeyPatch, offline_vectors: VectorEnv) -> VectorEnv:
     """Patch index_file's embedding + Qdrant builders to offline fakes.
 
     Returns the shared in-memory client so a test can inspect points, and the fake
     embedder so a test can embed the same way the retrieval layer does.
     """
-    from qdrant_client import AsyncQdrantClient
-
-    env = VectorEnv(client=AsyncQdrantClient(location=":memory:"), embedding=FakeEmbeddingService())
+    env = offline_vectors
     monkeypatch.setattr(
         "doc_manager.jobs.handlers.index_file.build_embedding_service",
         lambda settings: env.embedding,

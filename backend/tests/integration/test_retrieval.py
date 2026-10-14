@@ -200,3 +200,120 @@ async def test_moved_file_resolves_current_path(
         )
     assert results
     assert results[0].paths[0].display_path.endswith("after.txt")
+
+
+def _service_with_names(vector_env: object) -> RetrievalService:
+    from doc_manager.retrieval import NameMatchConfig
+    from doc_manager.vectors import NameIndex
+
+    profile = vector_env.embedding.profile  # type: ignore[attr-defined]
+    repo = QdrantRepository(vector_env.client, collection=profile.collection_name("doc_chunks"))  # type: ignore[attr-defined]
+    names = NameIndex(vector_env.client, collection=profile.collection_name("doc_names"))  # type: ignore[attr-defined]
+    return RetrievalService(
+        vector_env.embedding,  # type: ignore[attr-defined]
+        repo,
+        names=names,
+        name_match=NameMatchConfig(min_score=0.9, margin=0.05),
+    )
+
+
+async def test_file_name_match_leads_results(
+    tmp_path: Path,
+    db_engine: AsyncEngine,
+    session_factory: async_sessionmaker[AsyncSession],
+    idx_env: object,
+) -> None:
+    # The fridge receipt never says "fridge" or "warranty"; only its name does.
+    # Another file's text is full of those words and would win on content alone.
+    (tmp_path / "fridge warranty.txt").write_text("lowes receipt extended protection plan")
+    (tmp_path / "notes.txt").write_text("fridge warranty fridge warranty questions")
+    location = await _make_location(session_factory, tmp_path)
+    await _scan_and_index(JobEngine(), db_engine, session_factory, location)
+
+    plain = _service(idx_env)
+    named = _service_with_names(idx_env)
+    async with session_factory() as session:
+        before = await plain.search(session, query="fridge warranty", top_k=5)
+        after = await named.search(session, query="fridge warranty", top_k=5)
+    assert before[0].paths[0].display_path.endswith("notes.txt")
+    assert after[0].paths[0].display_path.endswith("fridge warranty.txt")
+    # Regular results still follow, without repeating the led passage.
+    assert [r.paths[0].display_path.endswith("notes.txt") for r in after[1:]] == [True]
+
+
+async def test_name_match_ignores_entries_that_are_not_indexed(
+    tmp_path: Path,
+    db_engine: AsyncEngine,
+    session_factory: async_sessionmaker[AsyncSession],
+    idx_env: object,
+) -> None:
+    from sqlalchemy import update
+
+    from doc_manager.db.models import CatalogEntry
+
+    (tmp_path / "fridge warranty.txt").write_text("lowes receipt extended protection plan")
+    (tmp_path / "notes.txt").write_text("fridge warranty fridge warranty questions")
+    location = await _make_location(session_factory, tmp_path)
+    await _scan_and_index(JobEngine(), db_engine, session_factory, location)
+    async with session_factory() as session:
+        await session.execute(
+            update(CatalogEntry)
+            .where(CatalogEntry.relative_path == "fridge warranty.txt")
+            .values(state="failed")
+        )
+        await session.commit()
+
+    async with session_factory() as session:
+        results = await _service_with_names(idx_env).search(
+            session, query="fridge warranty", top_k=5
+        )
+    assert results[0].paths[0].display_path.endswith("notes.txt")
+
+
+async def test_post_scan_sync_backfills_renames_and_prunes_name_points(
+    tmp_path: Path,
+    db_engine: AsyncEngine,
+    session_factory: async_sessionmaker[AsyncSession],
+    idx_env: object,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    from sqlalchemy import select
+
+    from doc_manager.db.models import CatalogEntry
+    from doc_manager.vectors import NameIndex, file_name_text, name_hash
+
+    profile = idx_env.embedding.profile  # type: ignore[attr-defined]
+    names = NameIndex(idx_env.client, collection=profile.collection_name("doc_names"))  # type: ignore[attr-defined]
+    # The rescan's deletion queues stale-vector cleanup; keep it offline too.
+    monkeypatch.setattr(
+        "doc_manager.jobs.handlers.cleanup.build_qdrant_repository",
+        lambda settings, profile: idx_env.repository(settings),  # type: ignore[attr-defined]
+    )
+
+    (tmp_path / "keep.txt").write_text("alpha content here")
+    (tmp_path / "gone.txt").write_text("bravo content there")
+    location = await _make_location(session_factory, tmp_path)
+    engine = JobEngine()
+    await _scan_and_index(engine, db_engine, session_factory, location)
+
+    async def entry_ids() -> dict[str, str]:
+        async with session_factory() as session:
+            rows = await session.execute(
+                select(CatalogEntry.relative_path, CatalogEntry.id).where(
+                    CatalogEntry.source_location_id == location
+                )
+            )
+            return {path: str(eid) for path, eid in rows.all()}
+
+    ids = await entry_ids()
+    assert set(await names.hashes_for_location(str(location))) == set(ids.values())
+
+    # Backfill: points lost (e.g. indexed before the name index existed).
+    await names.delete(list(ids.values()))
+    # Rename one file, delete the other, then rescan → sync converges.
+    (tmp_path / "keep.txt").rename(tmp_path / "kept renamed.txt")
+    (tmp_path / "gone.txt").unlink()
+    await _scan_and_index(engine, db_engine, session_factory, location)
+
+    hashes = await names.hashes_for_location(str(location))
+    assert hashes == {ids["keep.txt"]: name_hash(file_name_text("kept renamed.txt"))}

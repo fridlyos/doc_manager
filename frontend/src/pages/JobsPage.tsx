@@ -19,6 +19,7 @@ const TYPES = [
   "remove_stale_vectors",
   "build_duplicate_report",
   "build_sync_plan",
+  "sync_name_index",
 ];
 const ACTIVE = new Set<JobStatus>(["queued", "running", "retry_wait"]);
 const RETRYABLE = new Set<JobStatus>(["failed", "cancelled"]);

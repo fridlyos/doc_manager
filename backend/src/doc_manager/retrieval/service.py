@@ -7,6 +7,11 @@ vector payload — so a moved or renamed file yields a fresh, correct citation.
 
 No generation provider is touched here; search stays functional with generation
 disabled (Phase 4 exit criterion 3).
+
+File names are searched first: when a file's *name* clearly matches the query
+(its own vector in the name index), that file's best passages lead the results,
+ahead of the regular hybrid ranking. Only entries that are currently ``indexed``
+qualify — a failed original never shadows a copy that indexed fine.
 """
 
 from __future__ import annotations
@@ -23,7 +28,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from doc_manager.core.display import display_path
 from doc_manager.db.models import CatalogEntry, Chunk, FileVersion, SourceLocation
 from doc_manager.domain.enums import CatalogEntryState
-from doc_manager.vectors import QdrantRepository
+from doc_manager.vectors import NameIndex, QdrantRepository, SearchHit
 
 #: How the entry's catalog state maps to a citation's availability.
 _AVAILABILITY = {
@@ -195,10 +200,30 @@ class SearchFilters:
         return not (self.source_location_ids or self.extensions or self.document_ids)
 
 
+@dataclass(frozen=True, slots=True)
+class NameMatchConfig:
+    """When a file-name match is strong enough to lead the results (see Settings)."""
+
+    min_score: float = 0.75
+    margin: float = 0.05
+    max_files: int = 3
+    chunks_per_file: int = 2
+    #: Name candidates fetched before the score/margin cut.
+    candidates: int = 10
+
+
 class RetrievalService:
-    def __init__(self, embedding: QueryEmbedder, repo: QdrantRepository) -> None:
+    def __init__(
+        self,
+        embedding: QueryEmbedder,
+        repo: QdrantRepository,
+        names: NameIndex | None = None,
+        name_match: NameMatchConfig | None = None,
+    ) -> None:
         self._embedding = embedding
         self._repo = repo
+        self._names = names
+        self._name_match = name_match or NameMatchConfig()
 
     async def search(
         self,
@@ -229,6 +254,7 @@ class RetrievalService:
             return []  # filters exclude everything; no vector query needed.
 
         query_vector = self._embedding.embed_query(query)
+        keyword_query = expand_keyword_query(query)
         hits = await self._repo.search(
             query_vector,
             top_k=top_k,
@@ -236,8 +262,18 @@ class RetrievalService:
             content_object_ids=allowed,
             # Hybrid: fuse keyword matches (names, IDs, synonyms) with the vector
             # results so an exact/related term surfaces even on a weak vector score.
-            keyword_query=expand_keyword_query(query),
+            keyword_query=keyword_query,
         )
+        name_docs = await self._name_matches(session, query_vector, allowed)
+        if name_docs:
+            led = await self._repo.search(
+                query_vector,
+                top_k=top_k,
+                score_threshold=score_threshold,
+                content_object_ids=name_docs,
+                keyword_query=keyword_query,
+            )
+            hits = _name_first(led, hits, name_docs, self._name_match.chunks_per_file, top_k)
         if not hits:
             return []
 
@@ -261,6 +297,56 @@ class RetrievalService:
                 )
             )
         return results
+
+    async def _name_matches(
+        self,
+        session: AsyncSession,
+        query_vector: list[float],
+        allowed: Sequence[uuid.UUID | str] | None,
+    ) -> list[str]:
+        """Content objects of files whose name clearly matches, best first.
+
+        A name counts when it scores at least ``min_score`` and is within
+        ``margin`` of the best name score. Hits are re-checked against PostgreSQL:
+        the entry must be ``indexed`` *now* and its current content is used, so a
+        stale name point (renamed, failed, deleted) can never lead the results.
+        """
+        if self._names is None:
+            return []
+        cfg = self._name_match
+        hits = await self._names.search(query_vector, top_k=cfg.candidates)
+        if not hits:
+            return []
+        floor = max(cfg.min_score, hits[0].score - cfg.margin)
+        strong = [h for h in hits if h.score >= floor]
+        if not strong:
+            return []
+        entry_ids = []
+        for h in strong:
+            try:
+                entry_ids.append(uuid.UUID(h.catalog_entry_id))
+            except ValueError:
+                continue
+        rows = await session.execute(
+            select(CatalogEntry.id, FileVersion.content_object_id)
+            .join(FileVersion, FileVersion.id == CatalogEntry.current_file_version_id)
+            .where(
+                CatalogEntry.id.in_(entry_ids),
+                CatalogEntry.state == CatalogEntryState.indexed.value,
+                FileVersion.content_object_id.is_not(None),
+            )
+        )
+        content_of = {str(eid): str(cid) for eid, cid in rows.all()}
+        scope = {str(c) for c in allowed} if allowed is not None else None
+        ordered: list[str] = []
+        for h in strong:
+            cid = content_of.get(h.catalog_entry_id)
+            if cid is None or cid in ordered or (scope is not None and cid not in scope):
+                continue
+            ordered.append(cid)
+            if len(ordered) >= cfg.max_files:
+                break
+        return ordered
 
     async def content_ids_for_chunks(
         self, session: AsyncSession, chunk_ids: Sequence[str]
@@ -325,6 +411,28 @@ class RetrievalService:
                 )
             )
         return by_content
+
+
+def _name_first(
+    led: list[SearchHit],
+    hits: list[SearchHit],
+    name_docs: list[str],
+    per_file: int,
+    top_k: int,
+) -> list[SearchHit]:
+    """Name-matched files' best passages first (in name-match order), then the rest."""
+    rank = {cid: i for i, cid in enumerate(name_docs)}
+    taken: dict[str, int] = {}
+    first: list[SearchHit] = []
+    for hit in led:  # already ranked by relevance to the query
+        if taken.get(hit.content_object_id, 0) >= per_file:
+            continue
+        taken[hit.content_object_id] = taken.get(hit.content_object_id, 0) + 1
+        first.append(hit)
+    first.sort(key=lambda h: rank.get(h.content_object_id, len(rank)))  # stable
+    seen = {h.chunk_id for h in first}
+    rest = [h for h in hits if h.chunk_id not in seen]
+    return (first + rest)[:top_k]
 
 
 def _snippet(text: str) -> str:

@@ -59,6 +59,8 @@ class Settings(BaseSettings):
     database_url: str = "postgresql+psycopg://docman:docman@postgres:5432/docman"
     qdrant_url: str = "http://qdrant:6333"
     qdrant_collection: str = "doc_chunks"
+    #: Companion collection of per-file name vectors (see ``vectors.names``).
+    qdrant_names_collection: str = "doc_names"
 
     # --- Generation providers ---
     generation_provider: GenerationProvider = GenerationProvider.ollama
@@ -144,6 +146,15 @@ class Settings(BaseSettings):
     chunk_target_tokens: int = 750
     chunk_overlap_tokens: int = 100
     search_top_k: int = 12
+    # File-name-first retrieval: a file whose name scores at least
+    # ``name_match_min_score`` against the query, and within ``name_match_margin``
+    # of the best name match, has up to ``name_match_chunks_per_file`` of its best
+    # passages placed ahead of the regular results (at most
+    # ``name_match_max_files`` files).
+    name_match_min_score: float = 0.75
+    name_match_margin: float = 0.05
+    name_match_max_files: int = 3
+    name_match_chunks_per_file: int = 2
     search_score_threshold: float | None = None
     store_query_history: bool = False
     # RAG evidence selection (Phase 5.e): cap chunks per content object and the

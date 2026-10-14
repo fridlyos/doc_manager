@@ -8,6 +8,7 @@ from doc_manager.jobs.handlers.cleanup import handle_remove_stale_vectors
 from doc_manager.jobs.handlers.consistency import handle_catalog_consistency_check
 from doc_manager.jobs.handlers.duplicates import handle_build_duplicate_report
 from doc_manager.jobs.handlers.index_file import handle_index_file
+from doc_manager.jobs.handlers.name_index import handle_sync_name_index
 from doc_manager.jobs.handlers.reindex import handle_reindex_bulk
 from doc_manager.jobs.handlers.scan_location import handle_scan_location
 from doc_manager.jobs.handlers.sync_plan import handle_build_sync_plan
@@ -22,4 +23,5 @@ HANDLERS: dict[JobType, Handler] = {
     JobType.remove_stale_vectors: handle_remove_stale_vectors,
     JobType.build_duplicate_report: handle_build_duplicate_report,
     JobType.build_sync_plan: handle_build_sync_plan,
+    JobType.sync_name_index: handle_sync_name_index,
 }

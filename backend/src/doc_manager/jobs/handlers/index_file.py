@@ -48,14 +48,22 @@ from doc_manager.db.models import (
 )
 from doc_manager.db.session import db_now
 from doc_manager.domain.enums import CatalogEntryState, ExtractionStatus, JobStatus
-from doc_manager.embedding import EmbeddingProfile, build_embedding_service
+from doc_manager.embedding import EmbeddingProfile, EmbeddingService, build_embedding_service
 from doc_manager.extraction import ExtractionError, Extractor, get_extractor
 from doc_manager.extraction.errors import UNRECOVERABLE_CODES
 from doc_manager.extraction.normalize import NormalizedDocument, normalize
 from doc_manager.extraction.profile import extraction_profile_hash
 from doc_manager.jobs.context import JobContext
 from doc_manager.jobs.errors import LeaseLostError, PermanentJobError, TransientJobError
-from doc_manager.vectors import QdrantRepository, build_point, build_qdrant_repository
+from doc_manager.vectors import (
+    NamePoint,
+    QdrantRepository,
+    build_name_index,
+    build_point,
+    build_qdrant_repository,
+    file_name_text,
+    name_hash,
+)
 
 log = get_logger("doc_manager.jobs.index_file")
 
@@ -189,7 +197,7 @@ async def handle_index_file(ctx: JobContext) -> None:
         )
     ctx.check_boundary()
 
-    await _publish_success(
+    content_id = await _publish_success(
         ctx,
         entry,
         st,
@@ -204,6 +212,7 @@ async def handle_index_file(ctx: JobContext) -> None:
         embedding_profile=embedding_profile,
         qdrant=qdrant,
     )
+    await _index_name(settings, embedding_service, entry, content_id)
     log.info(
         "file_indexed",
         job_id=str(job.id),
@@ -303,7 +312,7 @@ async def _publish_success(
     chunking_profile: ChunkingProfile,
     embedding_profile: EmbeddingProfile,
     qdrant: QdrantRepository,
-) -> None:
+) -> uuid.UUID:
     session = ctx.session
     await _lock_job(ctx)
     content = await session.scalar(
@@ -354,6 +363,40 @@ async def _publish_success(
         session, ctx.job, worker_id=ctx.worker_id, lease_token=ctx.lease_token
     )
     await session.commit()
+    return content.id
+
+
+async def _index_name(
+    settings: Settings,
+    embedding_service: EmbeddingService,
+    entry: CatalogEntry,
+    content_id: uuid.UUID,
+) -> None:
+    """Embed the file's name into the name index (searched before passages).
+
+    Best effort: the file is already published as indexed, and the per-location
+    name sync after the next scan fills in anything missed here.
+    """
+    text = file_name_text(entry.relative_path)
+    if not text:
+        return
+    try:
+        names = build_name_index(settings, embedding_service.profile)
+        await names.ensure_collection(embedding_service.profile)
+        [vector] = await asyncio.to_thread(embedding_service.embed_documents, [text])
+        await names.upsert(
+            [
+                NamePoint(
+                    catalog_entry_id=str(entry.id),
+                    content_object_id=str(content_id),
+                    source_location_id=str(entry.source_location_id),
+                    name_hash=name_hash(text),
+                    vector=vector,
+                )
+            ]
+        )
+    except Exception as exc:  # noqa: BLE001 - never fail a published index on this.
+        log.warning("name_index_failed", catalog_entry_id=str(entry.id), error=str(exc))
 
 
 async def _index_chunks(

@@ -293,6 +293,19 @@ async def handle_scan_location(ctx: JobContext) -> None:
             max_attempts=get_settings().job_max_attempts,
             actor="scan",
         )
+    # Keep this location's file-name vectors in step with the catalog (new,
+    # renamed, failed, missing files); also backfills locations indexed before
+    # the name index existed. Deduped so repeated scans share one open job.
+    await ctx.engine.enqueue(
+        ctx.session,
+        job_type=JobType.sync_name_index,
+        payload={"version": 1, "source_location_id": str(location.id)},
+        origin=JobOrigin.handler,
+        source_location_id=location.id,
+        dedupe_key=f"names:{location.id}",
+        max_attempts=get_settings().job_max_attempts,
+        actor="scan",
+    )
     now = await db_now(session)
     location.last_successful_scan_at = now
     if location.sentinel_id is None and check.observed_sentinel is not None:

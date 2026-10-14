@@ -5,6 +5,7 @@ display paths from PostgreSQL. No generation provider involved.
 """
 
 from doc_manager.retrieval.service import (
+    NameMatchConfig,
     QueryEmbedder,
     ResolvedPath,
     RetrievalService,
@@ -13,6 +14,7 @@ from doc_manager.retrieval.service import (
 )
 
 __all__ = [
+    "NameMatchConfig",
     "QueryEmbedder",
     "ResolvedPath",
     "RetrievalService",

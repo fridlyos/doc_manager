@@ -40,6 +40,7 @@ class JobType(StrEnum):
     build_duplicate_report = "build_duplicate_report"
     build_sync_plan = "build_sync_plan"
     catalog_consistency_check = "catalog_consistency_check"
+    sync_name_index = "sync_name_index"
 
 
 class JobOrigin(StrEnum):
