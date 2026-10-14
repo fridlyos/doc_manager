@@ -33,6 +33,7 @@ from doc_manager.db.models import (
 )
 from doc_manager.db.session import db_now
 from doc_manager.domain.enums import (
+    DEFAULT_JOB_PRIORITY,
     TERMINAL_STATUSES,
     AttemptOutcome,
     ErrorClass,
@@ -206,7 +207,7 @@ class JobEngine:
         origin: JobOrigin,
         source_location_id: uuid.UUID | None = None,
         catalog_entry_id: uuid.UUID | None = None,
-        priority: int = 0,
+        priority: int | None = None,
         max_attempts: int = 3,
         dedupe_key: str | None = None,
         request_key: str | None = None,
@@ -220,8 +221,11 @@ class JobEngine:
         Returns ``(job, coalesced)``. When a partial-uniqueness rule (open scan
         per location, dedupe key) rejects the insert, the existing open job is
         returned with ``coalesced=True`` — scheduler ticks coalesce instead of
-        forming a backlog (contract sec. 8).
+        forming a backlog (contract sec. 8). ``priority`` defaults per job type
+        (``DEFAULT_JOB_PRIORITY``).
         """
+        if priority is None:
+            priority = DEFAULT_JOB_PRIORITY.get(job_type, 0)
         job = IngestionJob(
             job_type=job_type.value,
             payload_json=payload,

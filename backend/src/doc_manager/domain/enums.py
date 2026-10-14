@@ -41,6 +41,18 @@ class JobType(StrEnum):
     build_sync_plan = "build_sync_plan"
     catalog_consistency_check = "catalog_consistency_check"
     sync_name_index = "sync_name_index"
+    #: Re-extract one file with OCR. Split from ``index_file`` so slow OCR runs
+    #: in its own low-priority lane instead of blocking the normal queue.
+    ocr_file = "ocr_file"
+
+
+#: Claim priority by job type (higher first; the queue orders by priority, then
+#: age). Quick, user-visible work jumps the indexing backlog; OCR goes last.
+DEFAULT_JOB_PRIORITY: dict[JobType, int] = {
+    JobType.scan_location: 10,
+    JobType.sync_name_index: 10,
+    JobType.ocr_file: -10,
+}
 
 
 class JobOrigin(StrEnum):

@@ -15,7 +15,7 @@ from pathlib import Path
 import pymupdf
 
 from doc_manager.extraction.base import ExtractedDocument, ExtractedPage
-from doc_manager.extraction.errors import ExtractionError, ExtractionErrorCode
+from doc_manager.extraction.errors import ExtractionError, ExtractionErrorCode, OcrRequired
 
 
 @dataclass(frozen=True, slots=True)
@@ -32,8 +32,13 @@ class PdfOcrOptions:
 class PdfExtractor:
     name = "pdf"
 
-    def __init__(self, ocr: PdfOcrOptions | None = None) -> None:
+    def __init__(self, ocr: PdfOcrOptions | None = None, *, defer_ocr: bool = False) -> None:
         self._ocr = ocr
+        #: With OCR enabled, raise ``OcrRequired`` at the first page that would
+        #: need OCR instead of running it, so the slow work moves to the OCR lane.
+        #: Output and version are unchanged: the OCR lane re-extracts the whole
+        #: file with this same extractor version.
+        self._defer_ocr = defer_ocr
         # Version participates in the re-index trigger (TECHSTACK 7.3): toggling OCR
         # changes extraction output, so OCR runs carry a distinct version and a
         # later enable/disable forces affected documents to re-index.
@@ -85,6 +90,8 @@ class PdfExtractor:
             page = doc[index]
             text = page.get_text("text")
             if not text.strip() and self._ocr is not None and ocr_done < self._ocr.max_pages:
+                if self._defer_ocr:
+                    raise OcrRequired(f"page {index + 1} has no text layer")
                 text = self._ocr_page(page)
                 ocr_done += 1
             pages.append(ExtractedPage(index=index, page_number=index + 1, text=text))

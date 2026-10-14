@@ -11,6 +11,7 @@ from __future__ import annotations
 from enum import StrEnum
 from functools import lru_cache
 from pathlib import Path
+from typing import Literal
 
 from pydantic import field_validator, model_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
@@ -125,6 +126,13 @@ class Settings(BaseSettings):
     # --- Runtime ---
     log_level: str = "INFO"
     worker_concurrency: int = 1
+    # Lane split (OCR is slow; keep it from starving everything else):
+    #   "any"     - claim every job type by priority (single-worker default);
+    #   "general" - everything except OCR; joins OCR after being idle for
+    #               ``worker_ocr_join_idle_seconds``;
+    #   "ocr"     - OCR first, other work when no OCR is waiting.
+    worker_lane: Literal["any", "general", "ocr"] = "any"
+    worker_ocr_join_idle_seconds: float = 60.0
     # Lease/heartbeat defaults per the job state-machine contract (sec. 5):
     # 90 s lease, heartbeat at most every 20 s (must stay under lease/3).
     job_lease_seconds: int = 90

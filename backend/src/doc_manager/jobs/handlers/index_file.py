@@ -47,10 +47,16 @@ from doc_manager.db.models import (
     SourceLocation,
 )
 from doc_manager.db.session import db_now
-from doc_manager.domain.enums import CatalogEntryState, ExtractionStatus, JobStatus
+from doc_manager.domain.enums import (
+    CatalogEntryState,
+    ExtractionStatus,
+    JobOrigin,
+    JobStatus,
+    JobType,
+)
 from doc_manager.embedding import EmbeddingProfile, EmbeddingService, build_embedding_service
 from doc_manager.extraction import ExtractionError, Extractor, get_extractor
-from doc_manager.extraction.errors import UNRECOVERABLE_CODES
+from doc_manager.extraction.errors import UNRECOVERABLE_CODES, OcrRequired
 from doc_manager.extraction.normalize import NormalizedDocument, normalize
 from doc_manager.extraction.profile import extraction_profile_hash
 from doc_manager.jobs.context import JobContext
@@ -120,7 +126,10 @@ async def handle_index_file(ctx: JobContext) -> None:
         )
         raise PermanentJobError(code, message)
 
-    extractor = get_extractor(entry.extension, settings=get_settings())
+    # Normal indexing never OCRs: a file that needs it is handed to the OCR lane
+    # (a low-priority ``ocr_file`` job running this same handler with OCR on).
+    ocr_lane = job.job_type == JobType.ocr_file.value
+    extractor = get_extractor(entry.extension, settings=get_settings(), defer_ocr=not ocr_lane)
     if extractor is None:
         await _publish_terminal(
             ctx,
@@ -134,6 +143,9 @@ async def handle_index_file(ctx: JobContext) -> None:
 
     try:
         extracted = await asyncio.to_thread(extractor.extract, full)
+    except OcrRequired:
+        await _defer_to_ocr(ctx, entry)
+        return
     except ExtractionError as exc:
         await _publish_terminal(
             ctx,
@@ -222,6 +234,36 @@ async def handle_index_file(ctx: JobContext) -> None:
         embedded=vectors is not None,
         artifact_reused=artifact.reused,
     )
+
+
+async def _defer_to_ocr(ctx: JobContext, entry: CatalogEntry) -> None:
+    """Queue the low-priority OCR job for this entry and finish this one.
+
+    The entry goes ``queued`` (indexing pending) so rescans don't re-enqueue it;
+    the OCR job publishes the final indexed/failed state. Fenced like a publish so
+    a stale worker cannot enqueue.
+    """
+    session = ctx.session
+    await _lock_job(ctx)
+    payload = dict(ctx.job.payload_json or {})
+    await ctx.engine.enqueue(
+        session,
+        job_type=JobType.ocr_file,
+        payload={**payload, "catalog_entry_id": str(entry.id)},
+        origin=JobOrigin.handler,
+        source_location_id=entry.source_location_id,
+        catalog_entry_id=entry.id,
+        dedupe_key=f"ocr:{entry.id}",
+        root_job_id=ctx.job.root_job_id or ctx.job.id,
+        max_attempts=ctx.job.max_attempts,
+        actor="index_file",
+    )
+    entry.state = CatalogEntryState.queued.value
+    await ctx.engine.complete(
+        session, ctx.job, worker_id=ctx.worker_id, lease_token=ctx.lease_token
+    )
+    await session.commit()
+    log.info("ocr_deferred", job_id=str(ctx.job.id), catalog_entry_id=str(entry.id))
 
 
 async def _known_broken(session: AsyncSession, sha256: str) -> tuple[str, str] | None:

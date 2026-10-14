@@ -393,3 +393,56 @@ async def test_broken_pdf_is_never_extracted_again(
         assert (await _entries(session, location.id))[
             "broken.pdf"
         ].state == CatalogEntryState.indexed.value
+
+
+async def test_scanned_pdf_is_handed_to_the_low_priority_ocr_lane(
+    tmp_path: Path,
+    pg_url: str,
+    db_engine: AsyncEngine,
+    session_factory: async_sessionmaker[AsyncSession],
+    vector_env: object,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    from doc_manager.extraction.pdf import PdfExtractor
+
+    settings = Settings(database_url=pg_url, artifact_root=tmp_path / "artifacts", ocr_enabled=True)
+    monkeypatch.setattr("doc_manager.jobs.handlers.index_file.get_settings", lambda: settings)
+    ocr_calls: list[int] = []
+
+    def fake_ocr(self: PdfExtractor, page: pymupdf.Page) -> str:
+        ocr_calls.append(page.number)
+        return "lowes receipt extended protection plan"
+
+    monkeypatch.setattr(PdfExtractor, "_ocr_page", fake_ocr)
+    root = tmp_path / "docs"
+    root.mkdir()
+    scanned = pymupdf.open()
+    scanned.new_page()  # image-only: no text layer
+    scanned.save(root / "scan.pdf")
+    scanned.close()
+    _pdf(root / "text.pdf", ["plain text layer"])
+    location = await _make_location(session_factory, root)
+
+    await _scan_and_index(JobEngine(), db_engine, session_factory, location.id)
+
+    async with session_factory() as session:
+        entries = await _entries(session, location.id)
+        assert entries["scan.pdf"].state == CatalogEntryState.indexed.value
+        assert entries["text.pdf"].state == CatalogEntryState.indexed.value
+        jobs = (
+            await session.execute(
+                select(
+                    IngestionJob.job_type, IngestionJob.catalog_entry_id, IngestionJob.priority
+                ).where(
+                    IngestionJob.job_type.in_([JobType.index_file.value, JobType.ocr_file.value])
+                )
+            )
+        ).all()
+    by_type: dict[str, list[tuple[uuid.UUID | None, int]]] = {}
+    for job_type, entry_id, priority in jobs:
+        by_type.setdefault(job_type, []).append((entry_id, priority))
+    # Both files go through normal indexing; only the scanned one reaches OCR,
+    # at low priority, and OCR ran exactly once (in the OCR job).
+    assert len(by_type["index_file"]) == 2
+    assert by_type["ocr_file"] == [(entries["scan.pdf"].id, -10)]
+    assert ocr_calls == [0]

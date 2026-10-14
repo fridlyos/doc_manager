@@ -31,7 +31,6 @@ from doc_manager.domain.enums import CatalogEntryState
 from doc_manager.embedding import resolve_embedding_profile
 from doc_manager.jobs.context import JobContext
 from doc_manager.vectors import build_qdrant_repository
-from doc_manager.vectors.names import name_collection
 from doc_manager.vectors.repository import QdrantRepository
 
 log = get_logger("doc_manager.jobs.cleanup")
@@ -96,10 +95,13 @@ async def handle_remove_stale_vectors(ctx: JobContext) -> None:
     dropped = await drop_stale_collections(
         repo, active=repo.collection, base_prefix=f"{settings.qdrant_collection}__"
     )
+    # The name collection shares the chunk collection's profile suffix.
+    chunk_prefix = f"{settings.qdrant_collection}__"
+    names_prefix = f"{settings.qdrant_names_collection}__"
     dropped += await drop_stale_collections(
         repo,
-        active=name_collection(settings, profile),
-        base_prefix=f"{settings.qdrant_names_collection}__",
+        active=names_prefix + repo.collection.removeprefix(chunk_prefix),
+        base_prefix=names_prefix,
     )
     orphans = await remove_orphan_content(ctx, repo)
 

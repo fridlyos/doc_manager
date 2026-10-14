@@ -35,12 +35,15 @@ _BY_EXTENSION: dict[str, Extractor] = {
 SUPPORTED_EXTENSIONS = frozenset(_BY_EXTENSION)
 
 
-def get_extractor(extension: str, *, settings: Settings | None = None) -> Extractor | None:
+def get_extractor(
+    extension: str, *, settings: Settings | None = None, defer_ocr: bool = False
+) -> Extractor | None:
     """Return the extractor for an extension, or None if unsupported.
 
     When ``settings`` enables OCR, the PDF extractor is built with OCR so scanned
     pages are recovered; every other extractor (and the OCR-off case) uses the
-    shared stateless singleton.
+    shared stateless singleton. ``defer_ocr`` makes that PDF extractor raise
+    ``OcrRequired`` rather than OCR inline (see the OCR lane in ``index_file``).
     """
     ext = extension.lower().lstrip(".")
     if ext == "pdf" and settings is not None and settings.ocr_enabled:
@@ -49,6 +52,7 @@ def get_extractor(extension: str, *, settings: Settings | None = None) -> Extrac
                 language=settings.ocr_language,
                 dpi=settings.ocr_dpi,
                 max_pages=settings.ocr_max_pages,
-            )
+            ),
+            defer_ocr=defer_ocr,
         )
     return _BY_EXTENSION.get(ext)

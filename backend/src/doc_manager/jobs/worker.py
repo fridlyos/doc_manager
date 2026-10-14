@@ -36,6 +36,33 @@ from doc_manager.jobs.queue import JobEngine
 
 log = get_logger("doc_manager.worker")
 
+#: Job types that run in the OCR lane.
+_OCR_TYPES = frozenset({JobType.ocr_file})
+
+
+def _lane_plan(
+    lane: str,
+    general: tuple[JobType, ...],
+    ocr: tuple[JobType, ...],
+    idle_for: float,
+    ocr_join_idle_seconds: float,
+) -> list[tuple[JobType, ...]]:
+    """Job-type sets to try claiming, in order, for one claim round.
+
+    * ``any``: every type; queue priority already puts OCR last.
+    * ``ocr``: OCR first; other work only when no OCR is waiting.
+    * ``general``: never OCR, until this slot has been idle long enough — then it
+      joins the OCR backlog (general work still wins if it appears, since a
+      combined claim orders by priority).
+    """
+    if lane == "ocr":
+        return [ocr, general]
+    if lane == "general":
+        if idle_for >= ocr_join_idle_seconds:
+            return [general + ocr]
+        return [general]
+    return [general + ocr]
+
 
 class WorkerRunner:
     def __init__(self, settings: Settings, db_engine: AsyncEngine) -> None:
@@ -62,6 +89,7 @@ class WorkerRunner:
             version=__version__,
             worker_id=self.worker_id,
             concurrency=self.settings.worker_concurrency,
+            lane=self.settings.worker_lane,
             lease_seconds=self.settings.job_lease_seconds,
         )
         # Reap stale leases before claiming anything (contract sec. 11).
@@ -136,18 +164,31 @@ class WorkerRunner:
     async def _claim_loop(self, slot: int) -> None:
         worker_id = f"{self.worker_id}:{slot}"
         registered = tuple(HANDLERS.keys())
+        ocr = tuple(t for t in registered if t in _OCR_TYPES)
+        general = tuple(t for t in registered if t not in _OCR_TYPES)
+        lane = self.settings.worker_lane
+        idle_since = asyncio.get_running_loop().time()
         skip_ids: tuple[uuid.UUID, ...] = ()
         while not self.stop.is_set():
-            try:
-                ran = await self._claim_and_run_one(worker_id, registered, skip_ids)
-            except Exception:
-                log.exception("claim_loop_iteration_failed", worker=worker_id)
-                ran = None
+            idle_for = asyncio.get_running_loop().time() - idle_since
+            ran: bool | uuid.UUID | None = False
+            for job_types in _lane_plan(
+                lane, general, ocr, idle_for, self.settings.worker_ocr_join_idle_seconds
+            ):
+                try:
+                    ran = await self._claim_and_run_one(worker_id, job_types, skip_ids)
+                except Exception:
+                    log.exception("claim_loop_iteration_failed", worker=worker_id)
+                    ran = None
+                if ran:  # ran a job, or hit a busy lock: stop trying other types
+                    break
             if isinstance(ran, uuid.UUID):
                 skip_ids = (*skip_ids, ran)  # advisory lock busy: skip this round
                 continue
             skip_ids = ()
-            if not ran:
+            if ran:
+                idle_since = asyncio.get_running_loop().time()
+            else:
                 await self._sleep_unless_stopping(self.settings.job_poll_interval_seconds)
 
     async def _claim_and_run_one(

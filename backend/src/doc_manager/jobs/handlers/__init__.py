@@ -18,6 +18,8 @@ Handler = Callable[[JobContext], Awaitable[None]]
 HANDLERS: dict[JobType, Handler] = {
     JobType.scan_location: handle_scan_location,
     JobType.index_file: handle_index_file,
+    # OCR lane: same pipeline, OCR enabled, claimed last (see DEFAULT_JOB_PRIORITY).
+    JobType.ocr_file: handle_index_file,
     JobType.catalog_consistency_check: handle_catalog_consistency_check,
     JobType.reindex_all_for_profile: handle_reindex_bulk,
     JobType.remove_stale_vectors: handle_remove_stale_vectors,

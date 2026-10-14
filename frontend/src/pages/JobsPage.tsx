@@ -20,6 +20,7 @@ const TYPES = [
   "build_duplicate_report",
   "build_sync_plan",
   "sync_name_index",
+  "ocr_file",
 ];
 const ACTIVE = new Set<JobStatus>(["queued", "running", "retry_wait"]);
 const RETRYABLE = new Set<JobStatus>(["failed", "cancelled"]);

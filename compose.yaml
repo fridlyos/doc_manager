@@ -109,21 +109,28 @@ services:
       start_period: 20s
     restart: unless-stopped
 
-  worker:
+  # Workers run in two lanes so slow OCR never starves scans and normal indexing:
+  # `worker` (general lane, DOCMAN_GENERAL_WORKERS replicas, default 2) handles
+  # everything except OCR and joins the OCR backlog after sitting idle;
+  # `worker-ocr` (1 replica) works the OCR backlog first and helps with other
+  # jobs when no OCR is waiting.
+  worker: &worker
     build:
       context: .
       dockerfile: deploy/worker.Dockerfile
     # The worker loads the FastEmbed model; give it the most memory headroom.
     deploy:
-      resources:
+      replicas: ${DOCMAN_GENERAL_WORKERS:-2}
+      resources: &worker-resources
         limits:
           cpus: "${DOCMAN_WORKER_CPUS:-4}"
-          memory: ${DOCMAN_WORKER_MEM:-4g}
+          memory: ${DOCMAN_WORKER_MEM:-3g}
     env_file:
       - .env
-    environment:
+    environment: &worker-env
       DOCMAN_DATABASE_URL: "postgresql+psycopg://${DOCMAN_POSTGRES_USER:-docman}:${DOCMAN_POSTGRES_PASSWORD:-docman}@postgres:5432/${DOCMAN_POSTGRES_DB:-docman}"
       DOCMAN_QDRANT_URL: "http://qdrant:6333"
+      DOCMAN_WORKER_LANE: general
     volumes:
       # Read-only source documents. The mapped NAS/SMB drive must be connected
       # before `compose up`. create_host_path:false stops Compose from silently
@@ -151,6 +158,15 @@ services:
       qdrant:
         condition: service_healthy
     restart: unless-stopped
+
+  worker-ocr:
+    <<: *worker
+    deploy:
+      replicas: 1
+      resources: *worker-resources
+    environment:
+      <<: *worker-env
+      DOCMAN_WORKER_LANE: ocr
 
   # Vite dev server. Not started by default; `docker compose --profile dev up`.
   # Production serves the built static assets from the API container instead.

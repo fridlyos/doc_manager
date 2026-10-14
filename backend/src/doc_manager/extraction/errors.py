@@ -46,3 +46,11 @@ class ExtractionError(Exception):
         super().__init__(message)
         self.code = code
         self.message = message
+
+
+class OcrRequired(Exception):
+    """Raised by an extractor in deferred-OCR mode when the file needs OCR.
+
+    Not a failure: ``index_file`` hands the file to the low-priority OCR lane
+    (an ``ocr_file`` job) instead of running slow OCR in the normal queue.
+    """
